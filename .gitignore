@@ -7,3 +7,4 @@ coverage/
 .vite/
 *.log
 .DS_Store
+credentials/
