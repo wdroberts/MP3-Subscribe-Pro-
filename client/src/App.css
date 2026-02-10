@@ -279,6 +279,70 @@ body {
   margin-top: 1rem;
 }
 
+/* Login */
+.login-section {
+  text-align: center;
+  padding: 2rem;
+}
+
+.login-section h2 {
+  margin-bottom: 0.5rem;
+  color: #1a1a2e;
+}
+
+.login-section p {
+  color: #666;
+  margin-bottom: 1.5rem;
+}
+
+.google-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.5rem;
+  background: #fff;
+  border: 1px solid #dadce0;
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+  color: #3c4043;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+.google-btn:hover {
+  background: #f8f9fa;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.google-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* User info */
+.user-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.logout-btn {
+  background: none;
+  border: none;
+  color: #4a90d9;
+  cursor: pointer;
+  font-size: 0.9rem;
+  text-decoration: underline;
+}
+
+.logout-btn:hover {
+  color: #357abd;
+}
+
 /* Responsive */
 @media (max-width: 600px) {
   .app {

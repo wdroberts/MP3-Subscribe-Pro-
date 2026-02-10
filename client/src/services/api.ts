@@ -1,5 +1,15 @@
 import { UploadResult, TranscriptionResult, SummarizationResult } from '../types/index.ts';
 
+const TOKEN_KEY = 'mp3_auth_token';
+
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (token) {
+    return { Authorization: `Bearer ${token}` };
+  }
+  return {};
+}
+
 export async function uploadFile(
   file: File,
   onProgress: (percent: number) => void,
@@ -26,6 +36,12 @@ export async function uploadFile(
 
     xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
     xhr.open('POST', '/api/upload');
+
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+
     xhr.send(formData);
   });
 }
@@ -35,7 +51,7 @@ export async function startTranscription(
 ): Promise<{ id: string; status: string }> {
   const res = await fetch('/api/transcribe', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify({ uploadId }),
   });
 
@@ -48,7 +64,9 @@ export async function startTranscription(
 }
 
 export async function pollTranscriptionStatus(id: string): Promise<TranscriptionResult> {
-  const res = await fetch(`/api/transcribe/${id}/status`);
+  const res = await fetch(`/api/transcribe/${id}/status`, {
+    headers: getAuthHeaders(),
+  });
 
   if (!res.ok) {
     const body = await res.json();
@@ -63,7 +81,7 @@ export async function requestSummarization(
 ): Promise<SummarizationResult> {
   const res = await fetch('/api/summarize', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify({ transcriptionId }),
   });
 
