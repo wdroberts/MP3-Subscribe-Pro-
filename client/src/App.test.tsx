@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 
@@ -7,6 +7,9 @@ const mockLogin = vi.fn();
 const mockLogout = vi.fn();
 const mockHandleCallback = vi.fn();
 const mockStartTranscription = vi.fn();
+
+// Module-level capture for Upload's onUploadComplete prop
+let capturedOnUploadComplete: ((result: { id: string; filename: string; size: number; duration: number }) => void) | null = null;
 
 let mockAuthReturn: {
   user: { id: string; email: string; name: string; picture: string } | null;
@@ -40,12 +43,21 @@ vi.mock('./hooks/useTranscription', () => ({
   useTranscription: () => mockTranscriptionReturn,
 }));
 
+// Mock Upload to capture the onUploadComplete callback
+vi.mock('./components/Upload', () => ({
+  default: ({ onUploadComplete }: { onUploadComplete: (result: { id: string; filename: string; size: number; duration: number }) => void }) => {
+    capturedOnUploadComplete = onUploadComplete;
+    return <div data-testid="mock-upload">Upload Component</div>;
+  },
+}));
+
 // Mock window.location.search for OAuth callback test
 const originalLocation = window.location;
 
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    capturedOnUploadComplete = null;
 
     mockAuthReturn = {
       user: null,
@@ -94,7 +106,7 @@ describe('App', () => {
     mockAuthReturn.user = { id: '1', email: 'a@b.com', name: 'Test User', picture: '' };
 
     render(<App />);
-    expect(screen.getByText(/Drag & drop an MP3 file/)).toBeInTheDocument();
+    expect(screen.getByTestId('mock-upload')).toBeInTheDocument();
     expect(screen.queryByText('Sign in to get started')).not.toBeInTheDocument();
   });
 
@@ -116,30 +128,6 @@ describe('App', () => {
     expect(mockLogout).toHaveBeenCalledTimes(1);
   });
 
-  it('shows transcription results after upload', () => {
-    mockAuthReturn.isAuthenticated = true;
-    mockAuthReturn.user = { id: '1', email: 'a@b.com', name: 'Test User', picture: '' };
-    mockTranscriptionReturn.status = 'completed';
-    mockTranscriptionReturn.transcription = {
-      id: 'job-1',
-      uploadId: 'upload-1',
-      segments: [{ index: 0, startTime: 0, endTime: 1, text: 'Hello.' }],
-      fullText: 'Hello.',
-      status: 'completed',
-      createdAt: '2025-01-01T00:00:00.000Z',
-    };
-
-    // Simulate that an upload has happened by setting uploadResult via the results view
-    // We need to trigger the upload-complete flow. Since uploadResult is internal state,
-    // we verify the results view by checking that transcription status is completed
-    // and the results section renders
-    const { container } = render(<App />);
-
-    // When there's no uploadResult, it shows Upload component even with completed transcription
-    // This is correct — the upload result state drives the view
-    expect(screen.getByText(/Drag & drop an MP3 file/)).toBeInTheDocument();
-  });
-
   it('handles OAuth callback code from URL', () => {
     Object.defineProperty(window, 'location', {
       writable: true,
@@ -158,5 +146,100 @@ describe('App', () => {
 
     render(<App />);
     expect(mockHandleCallback).not.toHaveBeenCalled();
+  });
+
+  describe('upload-complete flow', () => {
+    beforeEach(() => {
+      mockAuthReturn.isAuthenticated = true;
+      mockAuthReturn.user = { id: '1', email: 'a@b.com', name: 'Test User', picture: '' };
+    });
+
+    it('calls startTranscription and shows results after upload completes', async () => {
+      render(<App />);
+
+      // Upload component should be shown initially
+      expect(screen.getByTestId('mock-upload')).toBeInTheDocument();
+
+      // Simulate upload completion
+      await act(async () => {
+        capturedOnUploadComplete!({ id: 'upload-1', filename: 'test.mp3', size: 1024, duration: 60 });
+      });
+
+      // startTranscription should be called with the upload id
+      expect(mockStartTranscription).toHaveBeenCalledWith('upload-1');
+
+      // Upload should be hidden, results view should show
+      expect(screen.queryByTestId('mock-upload')).not.toBeInTheDocument();
+      expect(screen.getByText('Upload New File')).toBeInTheDocument();
+    });
+
+    it('shows Transcription component in results view', async () => {
+      mockTranscriptionReturn.status = 'processing';
+
+      render(<App />);
+
+      await act(async () => {
+        capturedOnUploadComplete!({ id: 'upload-1', filename: 'test.mp3', size: 1024, duration: 60 });
+      });
+
+      // Transcription component renders with processing status
+      expect(screen.getByText(/Transcribing audio/i)).toBeInTheDocument();
+    });
+
+    it('shows Summary and Export when transcription is completed', async () => {
+      mockTranscriptionReturn.status = 'completed';
+      mockTranscriptionReturn.transcription = {
+        id: 'job-1',
+        uploadId: 'upload-1',
+        segments: [{ index: 0, startTime: 0, endTime: 1, text: 'Hello world.' }],
+        fullText: 'Hello world.',
+        status: 'completed',
+        createdAt: '2025-01-01T00:00:00.000Z',
+      };
+
+      render(<App />);
+
+      await act(async () => {
+        capturedOnUploadComplete!({ id: 'upload-1', filename: 'test.mp3', size: 1024, duration: 60 });
+      });
+
+      // Summary and Export components should render
+      expect(screen.getByText('Summary')).toBeInTheDocument();
+      expect(screen.getByText('Export')).toBeInTheDocument();
+    });
+
+    it('does not show Summary and Export when transcription is not completed', async () => {
+      mockTranscriptionReturn.status = 'processing';
+      mockTranscriptionReturn.transcription = null;
+
+      render(<App />);
+
+      await act(async () => {
+        capturedOnUploadComplete!({ id: 'upload-1', filename: 'test.mp3', size: 1024, duration: 60 });
+      });
+
+      // Summary and Export should not render
+      expect(screen.queryByText('Summary')).not.toBeInTheDocument();
+      expect(screen.queryByText('Export')).not.toBeInTheDocument();
+    });
+
+    it('resets to upload view when "Upload New File" is clicked', async () => {
+      render(<App />);
+
+      // Trigger upload complete
+      await act(async () => {
+        capturedOnUploadComplete!({ id: 'upload-1', filename: 'test.mp3', size: 1024, duration: 60 });
+      });
+
+      // Should show results view with reset button
+      expect(screen.getByText('Upload New File')).toBeInTheDocument();
+
+      // Click reset
+      await userEvent.click(screen.getByText('Upload New File'));
+
+      // Should go back to upload view
+      expect(screen.getByTestId('mock-upload')).toBeInTheDocument();
+      expect(screen.queryByText('Upload New File')).not.toBeInTheDocument();
+    });
   });
 });
