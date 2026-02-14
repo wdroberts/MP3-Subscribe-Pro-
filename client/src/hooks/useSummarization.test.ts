@@ -1,5 +1,6 @@
 import { renderHook, act } from '@testing-library/react';
 import { useSummarization } from './useSummarization';
+import type { SummarizationResult } from '../types';
 
 vi.mock('../services/api', () => ({
   requestSummarization: vi.fn(),
@@ -22,7 +23,7 @@ describe('useSummarization', () => {
   });
 
   it('sets isLoading during summarization', async () => {
-    let resolveReq: (value: unknown) => void;
+    let resolveReq: (value: SummarizationResult) => void;
     mockRequestSummarization.mockImplementation(
       () => new Promise((resolve) => { resolveReq = resolve; }),
     );

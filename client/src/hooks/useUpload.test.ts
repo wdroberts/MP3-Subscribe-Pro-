@@ -1,5 +1,6 @@
 import { renderHook, act } from '@testing-library/react';
 import { useUpload } from './useUpload';
+import type { UploadResult } from '../types';
 
 vi.mock('../services/api', () => ({
   uploadFile: vi.fn(),
@@ -23,7 +24,7 @@ describe('useUpload', () => {
   });
 
   it('sets isUploading to true during upload', async () => {
-    let resolveUpload: (value: unknown) => void;
+    let resolveUpload: (value: UploadResult) => void;
     mockUploadFile.mockImplementation(
       () => new Promise((resolve) => { resolveUpload = resolve; }),
     );

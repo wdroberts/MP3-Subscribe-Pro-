@@ -2,12 +2,14 @@ import { Request, Response, NextFunction } from 'express';
 import { MulterError } from 'multer';
 import { ApiErrorResponse } from '../types';
 
+/* eslint-disable @typescript-eslint/no-unused-vars */
 export function errorHandler(
   err: Error,
   _req: Request,
   res: Response<ApiErrorResponse>,
   _next: NextFunction,
 ): void {
+  /* eslint-enable @typescript-eslint/no-unused-vars */
   console.error('Error:', err.message);
 
   if (err instanceof MulterError) {

@@ -1,8 +1,5 @@
 import express from 'express';
 import request from 'supertest';
-import path from 'path';
-import fs from 'fs';
-import os from 'os';
 import { uploadRouter } from './upload';
 import * as fileManager from '../services/fileManager';
 import * as audioProcessor from '../services/audioProcessor';
@@ -16,15 +13,6 @@ const mockedValidateMp3 = jest.mocked(audioProcessor.validateMp3);
 
 const app = express();
 app.use('/api/upload', uploadRouter);
-
-// Create a real temp file for multer to process
-function createTempMp3(): string {
-  const tmpDir = os.tmpdir();
-  const tmpFile = path.join(tmpDir, `test-${Date.now()}.mp3`);
-  // Write a minimal file (multer needs a real file on disk for dest mode)
-  fs.writeFileSync(tmpFile, Buffer.alloc(100, 0xff));
-  return tmpFile;
-}
 
 describe('upload routes', () => {
   beforeEach(() => {
