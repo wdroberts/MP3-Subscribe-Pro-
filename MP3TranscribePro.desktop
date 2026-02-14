@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=MP3 Transcribe Pro
+Comment=Transcribe, summarize, and export MP3 files
+Exec=bash /home/user/MP3-Subscribe-Pro-/start.sh
+Terminal=true
+Type=Application
+Categories=AudioVideo;Audio;Utility;
