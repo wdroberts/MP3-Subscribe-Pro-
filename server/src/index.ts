@@ -1,3 +1,4 @@
+import path from 'path';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -12,7 +13,7 @@ import { createRateLimiter } from './middleware/rateLimiter';
 import { requireAuth } from './middleware/auth';
 import { ensureUploadDir, cleanupStaleUploads } from './services/fileManager';
 
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
