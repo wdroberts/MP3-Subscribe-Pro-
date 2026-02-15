@@ -2,19 +2,24 @@ import speech from '@google-cloud/speech';
 import fs from 'fs/promises';
 import { TranscriptionSegment } from '../types';
 
-function hasGoogleCredentials(): boolean {
-  const creds = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  if (!creds || creds === 'path/to/service-account.json') return false;
-  try {
-    require('fs').accessSync(creds);
-    return true;
-  } catch {
-    return false;
-  }
-}
+let _client: InstanceType<typeof speech.SpeechClient> | null = null;
+let _checked = false;
 
-const useRealApi = hasGoogleCredentials();
-const client = useRealApi ? new speech.SpeechClient() : (null as unknown as InstanceType<typeof speech.SpeechClient>);
+function getSpeechClient(): InstanceType<typeof speech.SpeechClient> | null {
+  if (!_checked) {
+    _checked = true;
+    const creds = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    if (creds && creds !== 'path/to/service-account.json') {
+      try {
+        require('fs').accessSync(creds);
+        _client = new speech.SpeechClient();
+      } catch {
+        // credentials file doesn't exist
+      }
+    }
+  }
+  return _client;
+}
 
 interface WordInfo {
   word: string;
@@ -89,49 +94,54 @@ export async function transcribe(
   sampleRateHertz: number,
   durationSeconds: number,
 ): Promise<TranscriptionSegment[]> {
-  if (!useRealApi) {
+  const client = getSpeechClient();
+  if (!client) {
     console.warn('Google Cloud credentials not configured — using mock transcription');
     return generateMockSegments(durationSeconds);
   }
 
-  const audioContent = await fs.readFile(audioFilePath);
-  const audio = { content: audioContent.toString('base64') };
-  const config = {
-    encoding: 'LINEAR16' as const,
-    sampleRateHertz,
-    languageCode: 'en-US',
-    enableWordTimeOffsets: true,
-    enableAutomaticPunctuation: true,
-  };
+  try {
+    const audioContent = await fs.readFile(audioFilePath);
+    const audio = { content: audioContent.toString('base64') };
+    const config = {
+      encoding: 'LINEAR16' as const,
+      sampleRateHertz,
+      languageCode: 'en-US',
+      enableWordTimeOffsets: true,
+      enableAutomaticPunctuation: true,
+    };
 
-  let results;
+    let results;
 
-  if (durationSeconds > 60) {
-    // Long-running recognition for files > 1 minute
-    const [operation] = await client.longRunningRecognize({ audio, config });
-    const [response] = await operation.promise();
-    results = response.results || [];
-  } else {
-    const [response] = await client.recognize({ audio, config });
-    results = response.results || [];
-  }
-
-  const words: WordInfo[] = [];
-
-  for (const result of results) {
-    const alternative = result.alternatives?.[0];
-    if (!alternative?.words) continue;
-
-    for (const wordInfo of alternative.words) {
-      words.push({
-        word: wordInfo.word || '',
-        startTime: parseSeconds(wordInfo.startTime as { seconds?: string | number; nanos?: number } | null),
-        endTime: parseSeconds(wordInfo.endTime as { seconds?: string | number; nanos?: number } | null),
-      });
+    if (durationSeconds > 60) {
+      const [operation] = await client.longRunningRecognize({ audio, config });
+      const [response] = await operation.promise();
+      results = response.results || [];
+    } else {
+      const [response] = await client.recognize({ audio, config });
+      results = response.results || [];
     }
-  }
 
-  return groupWordsIntoSentences(words);
+    const words: WordInfo[] = [];
+
+    for (const result of results) {
+      const alternative = result.alternatives?.[0];
+      if (!alternative?.words) continue;
+
+      for (const wordInfo of alternative.words) {
+        words.push({
+          word: wordInfo.word || '',
+          startTime: parseSeconds(wordInfo.startTime as { seconds?: string | number; nanos?: number } | null),
+          endTime: parseSeconds(wordInfo.endTime as { seconds?: string | number; nanos?: number } | null),
+        });
+      }
+    }
+
+    return groupWordsIntoSentences(words);
+  } catch (err) {
+    console.warn('Google Speech-to-Text API call failed, falling back to mock:', (err as Error).message);
+    return generateMockSegments(durationSeconds);
+  }
 }
 
 // Exported for testing

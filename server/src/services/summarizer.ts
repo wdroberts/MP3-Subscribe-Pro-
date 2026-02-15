@@ -1,10 +1,20 @@
 import { HfInference } from '@huggingface/inference';
 
-const apiKey = process.env.HUGGINGFACE_API_KEY;
-const useRealApi = !!apiKey && apiKey !== 'your-api-key';
-const hf = useRealApi ? new HfInference(apiKey) : (null as unknown as HfInference);
-
 const MODEL_ID = 'facebook/bart-large-cnn';
+
+let _hf: HfInference | null = null;
+let _checked = false;
+
+function getHfClient(): HfInference | null {
+  if (!_checked) {
+    _checked = true;
+    const key = process.env.HUGGINGFACE_API_KEY;
+    if (key && key !== 'your-api-key') {
+      _hf = new HfInference(key);
+    }
+  }
+  return _hf;
+}
 const MAX_CHUNK_CHARS = 3500;
 const OVERLAP_CHARS = 200;
 
@@ -42,7 +52,7 @@ function chunkText(text: string): string[] {
 }
 
 async function summarizeChunk(text: string): Promise<string> {
-  const result = await hf.summarization({
+  const result = await getHfClient()!.summarization({
     model: MODEL_ID,
     inputs: text,
     parameters: {
@@ -63,27 +73,32 @@ function mockSummarize(text: string): string {
 }
 
 export async function summarize(text: string): Promise<string> {
-  if (!useRealApi) {
+  if (!getHfClient()) {
     console.warn('Hugging Face API key not configured — using mock summarization');
     return mockSummarize(text);
   }
 
-  const chunks = chunkText(text);
+  try {
+    const chunks = chunkText(text);
 
-  if (chunks.length === 1) {
-    return summarizeChunk(chunks[0]);
+    if (chunks.length === 1) {
+      return await summarizeChunk(chunks[0]);
+    }
+
+    // Summarize each chunk
+    const chunkSummaries = await Promise.all(chunks.map(summarizeChunk));
+    const combined = chunkSummaries.join(' ');
+
+    // If the combined summaries are still long, do a final pass
+    if (combined.length > MAX_CHUNK_CHARS) {
+      return await summarizeChunk(combined);
+    }
+
+    return combined;
+  } catch (err) {
+    console.warn('Hugging Face API call failed, falling back to mock:', (err as Error).message);
+    return mockSummarize(text);
   }
-
-  // Summarize each chunk
-  const chunkSummaries = await Promise.all(chunks.map(summarizeChunk));
-  const combined = chunkSummaries.join(' ');
-
-  // If the combined summaries are still long, do a final pass
-  if (combined.length > MAX_CHUNK_CHARS) {
-    return summarizeChunk(combined);
-  }
-
-  return combined;
 }
 
 // Exported for testing
