@@ -14,6 +14,7 @@
     "test:coverage": "npm run test:coverage --workspace=server && npm run test:coverage --workspace=client",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write \"**/*.{ts,tsx,json,css,html}\"",
+    "start": "npm run start --workspace=server",
     "typecheck": "npm run typecheck --workspace=server && npm run typecheck --workspace=client"
   },
   "devDependencies": {
