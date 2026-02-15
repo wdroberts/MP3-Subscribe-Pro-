@@ -76,12 +76,12 @@ describe('upload routes', () => {
     expect(mockedCleanupUpload).toHaveBeenCalledWith('upload-456');
   });
 
-  it('rejects non-MP3 MIME types via multer fileFilter', async () => {
+  it('rejects non-audio MIME types via multer fileFilter', async () => {
     const res = await request(app)
       .post('/api/upload')
       .attach('file', Buffer.alloc(100, 0xff), {
-        filename: 'test.wav',
-        contentType: 'audio/wav',
+        filename: 'test.txt',
+        contentType: 'text/plain',
       });
 
     // Multer rejects before handler — results in 500 from the unhandled error

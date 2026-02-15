@@ -11,6 +11,17 @@ const ALLOWED_AUDIO_MIMES = new Set([
   'audio/x-mpeg',
   'audio/mpeg3',
   'audio/x-mpeg-3',
+  'audio/mp4',
+  'audio/m4a',
+  'audio/x-m4a',
+  'audio/aac',
+  'audio/wav',
+  'audio/wave',
+  'audio/x-wav',
+  'audio/ogg',
+  'audio/flac',
+  'audio/x-flac',
+  'audio/webm',
 ]);
 
 const upload = multer({
@@ -20,7 +31,7 @@ const upload = multer({
     if (ALLOWED_AUDIO_MIMES.has(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error(`Only MP3 files are allowed (received ${file.mimetype})`));
+      cb(new Error(`Only audio files are allowed (received ${file.mimetype})`));
     }
   },
 });
