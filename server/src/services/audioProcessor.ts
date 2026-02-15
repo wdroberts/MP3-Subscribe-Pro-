@@ -33,8 +33,15 @@ export function convertToLinear16(inputPath: string, outputDir: string): Promise
 export function validateMp3(filepath: string): Promise<boolean> {
   return new Promise((resolve) => {
     ffmpeg.ffprobe(filepath, (err, metadata) => {
-      if (err) return resolve(false);
+      if (err) {
+        console.error('ffprobe validation failed for', filepath, ':', err.message);
+        return resolve(false);
+      }
       const hasAudio = metadata.streams.some((s) => s.codec_type === 'audio');
+      if (!hasAudio) {
+        console.error('No audio stream found in', filepath,
+          '— streams:', metadata.streams.map((s) => s.codec_type));
+      }
       resolve(hasAudio);
     });
   });

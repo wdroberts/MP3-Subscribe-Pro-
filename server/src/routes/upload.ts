@@ -5,14 +5,22 @@ import { validateMp3 } from '../services/audioProcessor';
 
 const MAX_FILE_SIZE = (parseInt(process.env.MAX_FILE_SIZE_MB || '100', 10)) * 1024 * 1024;
 
+const ALLOWED_AUDIO_MIMES = new Set([
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/x-mpeg',
+  'audio/mpeg3',
+  'audio/x-mpeg-3',
+]);
+
 const upload = multer({
   dest: process.env.UPLOAD_DIR || './tmp/uploads',
   limits: { fileSize: MAX_FILE_SIZE },
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype === 'audio/mpeg' || file.mimetype === 'audio/mp3') {
+    if (ALLOWED_AUDIO_MIMES.has(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Only MP3 files are allowed'));
+      cb(new Error(`Only MP3 files are allowed (received ${file.mimetype})`));
     }
   },
 });
@@ -31,11 +39,14 @@ uploadRouter.post(
 
       const result = await saveUpload(req.file);
 
-      // Validate the file is actually audio
+      // Validate the file is actually audio using ffprobe
       const isValid = await validateMp3(result.filepath);
       if (!isValid) {
         await cleanupUpload(result.id);
-        res.status(400).json({ error: 'File is not a valid audio file' });
+        res.status(400).json({
+          error: 'File is not a valid audio file',
+          details: 'The uploaded file could not be recognized as audio. Ensure it is a valid MP3 file and not a renamed file of another format.',
+        });
         return;
       }
 

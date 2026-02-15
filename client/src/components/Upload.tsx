@@ -17,9 +17,17 @@ export default function Upload({ onUploadComplete }: UploadProps) {
 
   const handleUpload = async (file: File) => {
     setSelectedFile(file);
-    setIsUploading(true);
     setError(null);
     setProgress(0);
+
+    // Client-side validation: check MIME type or file extension
+    const validTypes = ['audio/mpeg', 'audio/mp3', 'audio/x-mpeg', 'audio/mpeg3', 'audio/x-mpeg-3'];
+    if (!validTypes.includes(file.type) && !file.name.toLowerCase().endsWith('.mp3')) {
+      setError(`File type "${file.type || 'unknown'}" is not supported. Please upload an MP3 file.`);
+      return;
+    }
+
+    setIsUploading(true);
 
     try {
       const result = await uploadFile(file, setProgress);
