@@ -2,7 +2,19 @@ import speech from '@google-cloud/speech';
 import fs from 'fs/promises';
 import { TranscriptionSegment } from '../types';
 
-const client = new speech.SpeechClient();
+function hasGoogleCredentials(): boolean {
+  const creds = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (!creds || creds === 'path/to/service-account.json') return false;
+  try {
+    require('fs').accessSync(creds);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const useRealApi = hasGoogleCredentials();
+const client = useRealApi ? new speech.SpeechClient() : (null as unknown as InstanceType<typeof speech.SpeechClient>);
 
 interface WordInfo {
   word: string;
@@ -51,11 +63,37 @@ function groupWordsIntoSentences(words: WordInfo[]): TranscriptionSegment[] {
   return segments;
 }
 
+function generateMockSegments(durationSeconds: number): TranscriptionSegment[] {
+  const sentences = [
+    'Welcome to MP3 Transcribe Pro.',
+    'This is a demo transcription generated because Google Cloud credentials are not configured.',
+    'To enable real transcription, add a valid service account JSON path to GOOGLE_APPLICATION_CREDENTIALS in your .env file.',
+    'The audio file was processed successfully and is ready for transcription.',
+    'Once credentials are configured, this text will be replaced with the actual speech content.',
+    'You can still test the export and summarization features with this demo text.',
+    'The timestamp markers shown here are spaced evenly across the audio duration.',
+    'Thank you for trying MP3 Transcribe Pro!',
+  ];
+
+  const segmentDuration = durationSeconds / sentences.length;
+  return sentences.map((text, i) => ({
+    index: i,
+    startTime: parseFloat((i * segmentDuration).toFixed(3)),
+    endTime: parseFloat(((i + 1) * segmentDuration).toFixed(3)),
+    text,
+  }));
+}
+
 export async function transcribe(
   audioFilePath: string,
   sampleRateHertz: number,
   durationSeconds: number,
 ): Promise<TranscriptionSegment[]> {
+  if (!useRealApi) {
+    console.warn('Google Cloud credentials not configured — using mock transcription');
+    return generateMockSegments(durationSeconds);
+  }
+
   const audioContent = await fs.readFile(audioFilePath);
   const audio = { content: audioContent.toString('base64') };
   const config = {

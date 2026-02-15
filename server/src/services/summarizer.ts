@@ -1,6 +1,8 @@
 import { HfInference } from '@huggingface/inference';
 
-const hf = new HfInference(process.env.HUGGINGFACE_API_KEY);
+const apiKey = process.env.HUGGINGFACE_API_KEY;
+const useRealApi = !!apiKey && apiKey !== 'your-api-key';
+const hf = useRealApi ? new HfInference(apiKey) : (null as unknown as HfInference);
 
 const MODEL_ID = 'facebook/bart-large-cnn';
 const MAX_CHUNK_CHARS = 3500;
@@ -51,7 +53,21 @@ async function summarizeChunk(text: string): Promise<string> {
   return result.summary_text;
 }
 
+function mockSummarize(text: string): string {
+  const sentences = text.split(/[.!?]+/).filter((s) => s.trim().length > 0);
+  const picked = sentences.slice(0, Math.min(3, sentences.length));
+  return (
+    picked.map((s) => s.trim()).join('. ') +
+    '. (Demo summary — configure HUGGINGFACE_API_KEY in .env for real summarization.)'
+  );
+}
+
 export async function summarize(text: string): Promise<string> {
+  if (!useRealApi) {
+    console.warn('Hugging Face API key not configured — using mock summarization');
+    return mockSummarize(text);
+  }
+
   const chunks = chunkText(text);
 
   if (chunks.length === 1) {
