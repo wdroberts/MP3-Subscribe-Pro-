@@ -1,5 +1,5 @@
 const MODEL_ID = 'facebook/bart-large-cnn';
-const HF_API_URL = `https://api-inference.huggingface.co/models/${MODEL_ID}`;
+const HF_API_URL = `https://router.huggingface.co/hf-inference/models/${MODEL_ID}`;
 
 let _apiKey: string | null = null;
 let _checked = false;
