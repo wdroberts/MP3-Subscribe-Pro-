@@ -18,6 +18,26 @@ let _client: InstanceType<typeof speech.SpeechClient> | null = null;
 function getSpeechClient(): InstanceType<typeof speech.SpeechClient> | null {
   if (_client !== null) return _client;
 
+  // Option 1: Inline JSON via GOOGLE_CREDENTIALS_JSON env var
+  const inlineJson = process.env.GOOGLE_CREDENTIALS_JSON;
+  if (inlineJson) {
+    try {
+      const parsed = JSON.parse(inlineJson);
+      _client = new speech.SpeechClient({
+        credentials: {
+          client_email: parsed.client_email,
+          private_key: parsed.private_key,
+        },
+        projectId: parsed.project_id,
+      });
+      console.log('[STT-v4] Google Speech client initialized from inline GOOGLE_CREDENTIALS_JSON');
+      return _client;
+    } catch (err) {
+      console.warn('[STT-v4] Failed to parse GOOGLE_CREDENTIALS_JSON:', (err as Error).message);
+    }
+  }
+
+  // Option 2: File path via GOOGLE_APPLICATION_CREDENTIALS env var
   const creds = process.env.GOOGLE_APPLICATION_CREDENTIALS;
   if (!creds || creds === 'path/to/service-account.json') return null;
 
