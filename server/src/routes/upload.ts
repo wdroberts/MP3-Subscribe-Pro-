@@ -1,7 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
-import { saveUpload, cleanupUpload } from '../services/fileManager';
-import { validateMp3 } from '../services/audioProcessor';
+import { saveUpload } from '../services/fileManager';
 
 const MAX_FILE_SIZE = (parseInt(process.env.MAX_FILE_SIZE_MB || '100', 10)) * 1024 * 1024;
 
@@ -49,17 +48,6 @@ uploadRouter.post(
       }
 
       const result = await saveUpload(req.file);
-
-      // Validate the file is actually audio using ffprobe
-      const isValid = await validateMp3(result.filepath);
-      if (!isValid) {
-        await cleanupUpload(result.id);
-        res.status(400).json({
-          error: 'File is not a valid audio file',
-          details: 'The uploaded file could not be recognized as audio. Ensure it is a valid MP3 file and not a renamed file of another format.',
-        });
-        return;
-      }
 
       res.status(201).json(result);
     } catch (err) {
