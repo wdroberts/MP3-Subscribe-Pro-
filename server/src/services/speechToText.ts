@@ -1,5 +1,6 @@
 import speech from '@google-cloud/speech';
 import fs from 'fs/promises';
+import path from 'path';
 import { TranscriptionSegment } from '../types';
 
 let _client: InstanceType<typeof speech.SpeechClient> | null = null;
@@ -11,7 +12,11 @@ function getSpeechClient(): InstanceType<typeof speech.SpeechClient> | null {
     const creds = process.env.GOOGLE_APPLICATION_CREDENTIALS;
     if (creds && creds !== 'path/to/service-account.json') {
       try {
-        require('fs').accessSync(creds);
+        // Resolve relative paths from the project root (where .env lives)
+        const projectRoot = path.resolve(__dirname, '../../..');
+        const resolvedPath = path.resolve(projectRoot, creds);
+        require('fs').accessSync(resolvedPath);
+        process.env.GOOGLE_APPLICATION_CREDENTIALS = resolvedPath;
         _client = new speech.SpeechClient();
       } catch {
         // credentials file doesn't exist
