@@ -78,19 +78,54 @@ async function summarizeChunk(text: string): Promise<string> {
   return result[0].summary_text;
 }
 
-function mockSummarize(text: string): string {
-  const sentences = text.split(/[.!?]+/).filter((s) => s.trim().length > 0);
-  const picked = sentences.slice(0, Math.min(3, sentences.length));
-  return (
-    picked.map((s) => s.trim()).join('. ') +
-    '. (Demo summary — configure HUGGINGFACE_API_KEY in .env for real summarization.)'
-  );
+function extractiveSummarize(text: string): string {
+  const sentences = text
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 20);
+
+  if (sentences.length <= 5) {
+    return sentences.join(' ');
+  }
+
+  // Score sentences by word frequency (simple extractive approach)
+  const wordFreq = new Map<string, number>();
+  const words = text.toLowerCase().match(/\b[a-z]{3,}\b/g) || [];
+  // Filter common stop words
+  const stopWords = new Set([
+    'the', 'and', 'that', 'this', 'with', 'for', 'are', 'but', 'not', 'you',
+    'all', 'can', 'had', 'her', 'was', 'one', 'our', 'out', 'has', 'have',
+    'from', 'they', 'been', 'said', 'each', 'which', 'their', 'will', 'other',
+    'about', 'many', 'then', 'them', 'these', 'some', 'would', 'into', 'more',
+    'could', 'such', 'what', 'its', 'than', 'also', 'just', 'know', 'really',
+  ]);
+  for (const w of words) {
+    if (!stopWords.has(w)) {
+      wordFreq.set(w, (wordFreq.get(w) || 0) + 1);
+    }
+  }
+
+  // Score each sentence
+  const scored = sentences.map((sentence, index) => {
+    const sWords = sentence.toLowerCase().match(/\b[a-z]{3,}\b/g) || [];
+    const score = sWords.reduce((sum, w) => sum + (wordFreq.get(w) || 0), 0) / (sWords.length || 1);
+    return { sentence, score, index };
+  });
+
+  // Pick top sentences, preserving original order
+  const topCount = Math.max(3, Math.ceil(sentences.length * 0.2));
+  const top = scored
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topCount)
+    .sort((a, b) => a.index - b.index);
+
+  return top.map((t) => t.sentence).join(' ');
 }
 
 export async function summarize(text: string): Promise<string> {
   if (!getApiKey()) {
     console.warn('Hugging Face API key not configured — using mock summarization');
-    return mockSummarize(text);
+    return extractiveSummarize(text);
   }
 
   try {
@@ -112,9 +147,8 @@ export async function summarize(text: string): Promise<string> {
     return combined;
   } catch (err) {
     const e = err as Error;
-    console.warn('Hugging Face API call failed, falling back to mock:', e.message);
-    console.warn('[Summarizer] Full error:', e);
-    return mockSummarize(text);
+    console.warn('[Summarizer] HF API failed, using extractive fallback:', e.message);
+    return extractiveSummarize(text);
   }
 }
 
