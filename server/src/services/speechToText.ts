@@ -104,7 +104,7 @@ async function transcribeChunk(
   durationSeconds: number,
 ): Promise<WordInfo[]> {
   const audioContent = await fs.readFile(audioFilePath);
-  console.log(`Sending ${encoding} chunk (${(audioContent.length / 1e6).toFixed(2)}MB raw, ${(audioContent.length * 4 / 3 / 1e6).toFixed(2)}MB base64) duration=${durationSeconds.toFixed(0)}s`);
+  console.warn(`[STT] Sending ${encoding} chunk (${(audioContent.length / 1e6).toFixed(2)}MB raw, ${(audioContent.length * 4 / 3 / 1e6).toFixed(2)}MB base64) duration=${durationSeconds.toFixed(0)}s`);
   const audio = { content: audioContent.toString('base64') };
   const config = {
     encoding: encoding as 'MP3' | 'LINEAR16',
@@ -156,25 +156,25 @@ export async function transcribe(
     // Prefer original MP3 (much smaller than LINEAR16 WAV)
     const mp3Path = originalMp3Path || audioFilePath;
     const mp3Stat = await fs.stat(mp3Path);
-    console.log(`Transcribe: MP3=${(mp3Stat.size / 1e6).toFixed(2)}MB, limit=${(INLINE_LIMIT / 1e6).toFixed(1)}MB, duration=${durationSeconds.toFixed(0)}s`);
+    console.warn(`[STT] Transcribe: MP3=${(mp3Stat.size / 1e6).toFixed(2)}MB, limit=${(INLINE_LIMIT / 1e6).toFixed(1)}MB, duration=${durationSeconds.toFixed(0)}s`);
 
     if (mp3Stat.size <= INLINE_LIMIT) {
-      console.log('Path: sending MP3 inline');
+      console.warn('[STT] Path: sending MP3 inline');
       const words = await transcribeChunk(client, mp3Path, 'MP3', sampleRateHertz, durationSeconds);
       return groupWordsIntoSentences(words);
     }
 
     // MP3 too large — fall back to LINEAR16 WAV (already converted), which may also be large
     const wavStat = await fs.stat(audioFilePath).catch(() => null);
-    console.log(`Path: MP3 too large, WAV=${wavStat ? (wavStat.size / 1e6).toFixed(2) + 'MB' : 'not found'}`);
+    console.warn(`[STT] Path: MP3 too large, WAV=${wavStat ? (wavStat.size / 1e6).toFixed(2) + 'MB' : 'not found'}`);
     if (wavStat && wavStat.size <= INLINE_LIMIT) {
-      console.log('Path: sending WAV inline');
+      console.warn('[STT] Path: sending WAV inline');
       const words = await transcribeChunk(client, audioFilePath, 'LINEAR16', sampleRateHertz, durationSeconds);
       return groupWordsIntoSentences(words);
     }
 
     // Both too large — chunk the MP3 using ffmpeg
-    console.log(`Audio too large for inline (${(mp3Stat.size / 1e6).toFixed(1)}MB), splitting into chunks...`);
+    console.warn(`[STT] Audio too large for inline (${(mp3Stat.size / 1e6).toFixed(1)}MB), splitting into chunks...`);
     const chunkDir = path.join(path.dirname(audioFilePath), 'chunks');
     await fs.mkdir(chunkDir, { recursive: true });
 
