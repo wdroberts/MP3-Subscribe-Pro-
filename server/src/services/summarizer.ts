@@ -1,22 +1,21 @@
-import { HfInference } from '@huggingface/inference';
-
 const MODEL_ID = 'facebook/bart-large-cnn';
+const HF_API_URL = `https://api-inference.huggingface.co/models/${MODEL_ID}`;
 
-let _hf: HfInference | null = null;
+let _apiKey: string | null = null;
 let _checked = false;
 
-function getHfClient(): HfInference | null {
+function getApiKey(): string | null {
   if (!_checked) {
     _checked = true;
     const key = process.env.HUGGINGFACE_API_KEY;
     if (key && key !== 'your-api-key') {
       console.log(`[Summarizer] HF API key found (${key.slice(0, 6)}...)`);
-      _hf = new HfInference(key);
+      _apiKey = key;
     } else {
       console.warn(`[Summarizer] HUGGINGFACE_API_KEY is ${key ? `"${key}" (placeholder)` : 'not set'}`);
     }
   }
-  return _hf;
+  return _apiKey;
 }
 const MAX_CHUNK_CHARS = 3500;
 const OVERLAP_CHARS = 200;
@@ -55,15 +54,28 @@ function chunkText(text: string): string[] {
 }
 
 async function summarizeChunk(text: string): Promise<string> {
-  const result = await getHfClient()!.summarization({
-    model: MODEL_ID,
-    inputs: text,
-    parameters: {
-      max_length: 300,
-      min_length: 50,
+  const response = await fetch(HF_API_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${getApiKey()}`,
+      'Content-Type': 'application/json',
     },
+    body: JSON.stringify({
+      inputs: text,
+      parameters: {
+        max_length: 300,
+        min_length: 50,
+      },
+    }),
   });
-  return result.summary_text;
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`HF API ${response.status}: ${errorBody}`);
+  }
+
+  const result = await response.json();
+  return result[0].summary_text;
 }
 
 function mockSummarize(text: string): string {
@@ -76,7 +88,7 @@ function mockSummarize(text: string): string {
 }
 
 export async function summarize(text: string): Promise<string> {
-  if (!getHfClient()) {
+  if (!getApiKey()) {
     console.warn('Hugging Face API key not configured — using mock summarization');
     return mockSummarize(text);
   }
