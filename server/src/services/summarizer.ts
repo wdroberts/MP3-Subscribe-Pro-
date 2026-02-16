@@ -10,7 +10,10 @@ function getHfClient(): HfInference | null {
     _checked = true;
     const key = process.env.HUGGINGFACE_API_KEY;
     if (key && key !== 'your-api-key') {
+      console.log(`[Summarizer] HF API key found (${key.slice(0, 6)}...)`);
       _hf = new HfInference(key);
+    } else {
+      console.warn(`[Summarizer] HUGGINGFACE_API_KEY is ${key ? `"${key}" (placeholder)` : 'not set'}`);
     }
   }
   return _hf;
@@ -96,7 +99,9 @@ export async function summarize(text: string): Promise<string> {
 
     return combined;
   } catch (err) {
-    console.warn('Hugging Face API call failed, falling back to mock:', (err as Error).message);
+    const e = err as Error;
+    console.warn('Hugging Face API call failed, falling back to mock:', e.message);
+    console.warn('[Summarizer] Full error:', e);
     return mockSummarize(text);
   }
 }
