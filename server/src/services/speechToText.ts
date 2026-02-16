@@ -39,17 +39,30 @@ function getSpeechClient(): InstanceType<typeof speech.SpeechClient> | null {
 
   // Option 2: File path via GOOGLE_APPLICATION_CREDENTIALS env var
   const creds = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  if (!creds || creds === 'path/to/service-account.json') return null;
+  if (!creds || creds === 'path/to/service-account.json') {
+    // Check if .env was loaded at all
+    const envPath = path.resolve(__dirname, '../../../.env');
+    const envExists = fsSync.existsSync(envPath);
+    console.warn(
+      `[STT-v4] GOOGLE_APPLICATION_CREDENTIALS is ${creds ? `"${creds}" (placeholder)` : 'not set'}.`,
+      envExists
+        ? 'The .env file exists but may be missing this variable.'
+        : `No .env file found at ${envPath} — copy .env.example to .env and configure it.`,
+    );
+    return null;
+  }
 
   try {
     const projectRoot = path.resolve(__dirname, '../../..');
     const resolved = path.resolve(projectRoot, creds);
+    console.log(`[STT-v4] Resolved credentials path: ${resolved}`);
     fsSync.accessSync(resolved);
     process.env.GOOGLE_APPLICATION_CREDENTIALS = resolved;
     _client = new speech.SpeechClient();
     console.log('[STT-v4] Google Speech client initialized, credentials:', resolved);
   } catch {
-    console.warn('[STT-v4] Credentials file not found:', creds);
+    console.warn('[STT-v4] Credentials file not found at resolved path. GOOGLE_APPLICATION_CREDENTIALS:', creds);
+    console.warn('[STT-v4] Ensure the service account JSON file exists in the project root.');
   }
   return _client;
 }
