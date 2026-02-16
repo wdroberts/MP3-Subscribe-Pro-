@@ -74,7 +74,7 @@ async function summarizeChunk(text: string): Promise<string> {
     throw new Error(`HF API ${response.status}: ${errorBody}`);
   }
 
-  const result = await response.json();
+  const result = (await response.json()) as Array<{ summary_text: string }>;
   return result[0].summary_text;
 }
 
