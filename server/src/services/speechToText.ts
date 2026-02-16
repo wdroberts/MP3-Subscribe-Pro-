@@ -217,7 +217,7 @@ export async function transcribe(
 
     return groupWordsIntoSentences(allWords);
   } catch (err) {
-    console.warn('Google Speech-to-Text API call failed, falling back to mock:', (err as Error).message);
+    console.warn('[STT-v3] Google Speech-to-Text API call failed, falling back to mock:', (err as Error).message);
     return generateMockSegments(durationSeconds);
   }
 }
