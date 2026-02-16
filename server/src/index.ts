@@ -26,7 +26,9 @@ const PORT = process.env.PORT || 3001;
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
-app.use(createRateLimiter());
+if (process.env.NODE_ENV !== 'development') {
+  app.use(createRateLimiter());
+}
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
