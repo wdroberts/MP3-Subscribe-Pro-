@@ -94,10 +94,56 @@ function generateMockSegments(durationSeconds: number): TranscriptionSegment[] {
   }));
 }
 
+const INLINE_LIMIT = 7_500_000; // ~10MB after base64 encoding
+
+async function transcribeChunk(
+  client: InstanceType<typeof speech.SpeechClient>,
+  audioFilePath: string,
+  encoding: 'MP3' | 'LINEAR16',
+  sampleRateHertz: number,
+  durationSeconds: number,
+): Promise<WordInfo[]> {
+  const audioContent = await fs.readFile(audioFilePath);
+  const audio = { content: audioContent.toString('base64') };
+  const config = {
+    encoding: encoding as unknown as number,
+    sampleRateHertz,
+    languageCode: 'en-US',
+    enableWordTimeOffsets: true,
+    enableAutomaticPunctuation: true,
+  };
+
+  let results;
+
+  if (durationSeconds > 60) {
+    const [operation] = await client.longRunningRecognize({ audio, config });
+    const [response] = await operation.promise();
+    results = response.results || [];
+  } else {
+    const [response] = await client.recognize({ audio, config });
+    results = response.results || [];
+  }
+
+  const words: WordInfo[] = [];
+  for (const result of results) {
+    const alternative = result.alternatives?.[0];
+    if (!alternative?.words) continue;
+    for (const wordInfo of alternative.words) {
+      words.push({
+        word: wordInfo.word || '',
+        startTime: parseSeconds(wordInfo.startTime as { seconds?: string | number; nanos?: number } | null),
+        endTime: parseSeconds(wordInfo.endTime as { seconds?: string | number; nanos?: number } | null),
+      });
+    }
+  }
+  return words;
+}
+
 export async function transcribe(
   audioFilePath: string,
   sampleRateHertz: number,
   durationSeconds: number,
+  originalMp3Path?: string,
 ): Promise<TranscriptionSegment[]> {
   const client = getSpeechClient();
   if (!client) {
@@ -106,43 +152,66 @@ export async function transcribe(
   }
 
   try {
-    const audioContent = await fs.readFile(audioFilePath);
-    const audio = { content: audioContent.toString('base64') };
-    const config = {
-      encoding: 'LINEAR16' as const,
-      sampleRateHertz,
-      languageCode: 'en-US',
-      enableWordTimeOffsets: true,
-      enableAutomaticPunctuation: true,
-    };
+    // Prefer original MP3 (much smaller than LINEAR16 WAV)
+    const mp3Path = originalMp3Path || audioFilePath;
+    const mp3Stat = await fs.stat(mp3Path);
 
-    let results;
-
-    if (durationSeconds > 60) {
-      const [operation] = await client.longRunningRecognize({ audio, config });
-      const [response] = await operation.promise();
-      results = response.results || [];
-    } else {
-      const [response] = await client.recognize({ audio, config });
-      results = response.results || [];
+    if (mp3Stat.size <= INLINE_LIMIT) {
+      // MP3 fits inline — send directly
+      const words = await transcribeChunk(client, mp3Path, 'MP3', sampleRateHertz, durationSeconds);
+      return groupWordsIntoSentences(words);
     }
 
-    const words: WordInfo[] = [];
+    // MP3 too large — fall back to LINEAR16 WAV (already converted), which may also be large
+    const wavStat = await fs.stat(audioFilePath).catch(() => null);
+    if (wavStat && wavStat.size <= INLINE_LIMIT) {
+      const words = await transcribeChunk(client, audioFilePath, 'LINEAR16', sampleRateHertz, durationSeconds);
+      return groupWordsIntoSentences(words);
+    }
 
-    for (const result of results) {
-      const alternative = result.alternatives?.[0];
-      if (!alternative?.words) continue;
+    // Both too large — chunk the MP3 using ffmpeg
+    console.log(`Audio too large for inline (${(mp3Stat.size / 1e6).toFixed(1)}MB), splitting into chunks...`);
+    const chunkDir = path.join(path.dirname(audioFilePath), 'chunks');
+    await fs.mkdir(chunkDir, { recursive: true });
 
-      for (const wordInfo of alternative.words) {
-        words.push({
-          word: wordInfo.word || '',
-          startTime: parseSeconds(wordInfo.startTime as { seconds?: string | number; nanos?: number } | null),
-          endTime: parseSeconds(wordInfo.endTime as { seconds?: string | number; nanos?: number } | null),
-        });
+    const chunkDurationSec = 240; // 4-minute chunks
+    const numChunks = Math.ceil(durationSeconds / chunkDurationSec);
+    const allWords: WordInfo[] = [];
+
+    for (let i = 0; i < numChunks; i++) {
+      const startSec = i * chunkDurationSec;
+      const chunkPath = path.join(chunkDir, `chunk_${i}.mp3`);
+
+      await new Promise<void>((resolve, reject) => {
+        const ffmpeg = require('fluent-ffmpeg');
+        ffmpeg(mp3Path)
+          .setStartTime(startSec)
+          .duration(chunkDurationSec)
+          .audioChannels(1)
+          .audioBitrate('64k')
+          .on('end', () => resolve())
+          .on('error', (err: Error) => reject(err))
+          .save(chunkPath);
+      });
+
+      const chunkStat = await fs.stat(chunkPath);
+      if (chunkStat.size === 0) continue;
+
+      const chunkDur = Math.min(chunkDurationSec, durationSeconds - startSec);
+      const words = await transcribeChunk(client, chunkPath, 'MP3', 16000, chunkDur);
+
+      // Offset timestamps by chunk start time
+      for (const w of words) {
+        w.startTime += startSec;
+        w.endTime += startSec;
       }
+      allWords.push(...words);
     }
 
-    return groupWordsIntoSentences(words);
+    // Clean up chunks
+    await fs.rm(chunkDir, { recursive: true, force: true });
+
+    return groupWordsIntoSentences(allWords);
   } catch (err) {
     console.warn('Google Speech-to-Text API call failed, falling back to mock:', (err as Error).message);
     return generateMockSegments(durationSeconds);

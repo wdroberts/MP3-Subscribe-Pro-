@@ -78,9 +78,9 @@ async function processTranscription(jobId: string, uploadId: string): Promise<vo
   // Convert to LINEAR16
   const audioMeta = await convertToLinear16(inputPath, uploadDir);
 
-  // Transcribe
+  // Transcribe — pass both the converted WAV and original MP3
   const convertedPath = getConvertedPath(uploadDir);
-  const segments = await transcribe(convertedPath, audioMeta.sampleRateHertz, audioMeta.durationSeconds);
+  const segments = await transcribe(convertedPath, audioMeta.sampleRateHertz, audioMeta.durationSeconds, inputPath);
 
   const fullText = segments.map((s) => s.text).join(' ');
 
