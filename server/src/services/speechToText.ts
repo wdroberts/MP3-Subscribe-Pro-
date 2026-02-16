@@ -94,7 +94,7 @@ function generateMockSegments(durationSeconds: number): TranscriptionSegment[] {
   }));
 }
 
-const INLINE_LIMIT = 7_500_000; // ~10MB after base64 encoding
+const INLINE_LIMIT = 5_000_000; // stay well under Google's 10MB request limit after base64 + overhead
 
 async function transcribeChunk(
   client: InstanceType<typeof speech.SpeechClient>,
@@ -104,9 +104,10 @@ async function transcribeChunk(
   durationSeconds: number,
 ): Promise<WordInfo[]> {
   const audioContent = await fs.readFile(audioFilePath);
+  console.log(`Sending ${encoding} chunk (${(audioContent.length / 1e6).toFixed(2)}MB raw, ${(audioContent.length * 4 / 3 / 1e6).toFixed(2)}MB base64) duration=${durationSeconds.toFixed(0)}s`);
   const audio = { content: audioContent.toString('base64') };
   const config = {
-    encoding: encoding as unknown as number,
+    encoding: encoding as 'MP3' | 'LINEAR16',
     sampleRateHertz,
     languageCode: 'en-US',
     enableWordTimeOffsets: true,
@@ -155,16 +156,19 @@ export async function transcribe(
     // Prefer original MP3 (much smaller than LINEAR16 WAV)
     const mp3Path = originalMp3Path || audioFilePath;
     const mp3Stat = await fs.stat(mp3Path);
+    console.log(`Transcribe: MP3=${(mp3Stat.size / 1e6).toFixed(2)}MB, limit=${(INLINE_LIMIT / 1e6).toFixed(1)}MB, duration=${durationSeconds.toFixed(0)}s`);
 
     if (mp3Stat.size <= INLINE_LIMIT) {
-      // MP3 fits inline — send directly
+      console.log('Path: sending MP3 inline');
       const words = await transcribeChunk(client, mp3Path, 'MP3', sampleRateHertz, durationSeconds);
       return groupWordsIntoSentences(words);
     }
 
     // MP3 too large — fall back to LINEAR16 WAV (already converted), which may also be large
     const wavStat = await fs.stat(audioFilePath).catch(() => null);
+    console.log(`Path: MP3 too large, WAV=${wavStat ? (wavStat.size / 1e6).toFixed(2) + 'MB' : 'not found'}`);
     if (wavStat && wavStat.size <= INLINE_LIMIT) {
+      console.log('Path: sending WAV inline');
       const words = await transcribeChunk(client, audioFilePath, 'LINEAR16', sampleRateHertz, durationSeconds);
       return groupWordsIntoSentences(words);
     }
