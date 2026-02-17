@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import path from 'path';
 import { uploadExists, getUploadDir } from '../services/fileManager';
 import { convertToLinear16, getConvertedPath } from '../services/audioProcessor';
-import { transcribe } from '../services/speechToText';
+import { transcribe, OnProgressCallback } from '../services/speechToText';
 import {
   createTranscriptionJob,
   updateTranscriptionJob,
@@ -61,7 +61,7 @@ transcribeRouter.get(
       if (job.status === 'completed') {
         res.json(job);
       } else {
-        res.json({ id: job.id, status: job.status, error: job.error });
+        res.json({ id: job.id, status: job.status, error: job.error, progress: job.progress });
       }
     } catch (err) {
       next(err);
@@ -70,7 +70,10 @@ transcribeRouter.get(
 );
 
 async function processTranscription(jobId: string, uploadId: string): Promise<void> {
-  updateTranscriptionJob(jobId, { status: 'processing' });
+  updateTranscriptionJob(jobId, {
+    status: 'processing',
+    progress: { percent: 0, currentStep: 'Converting audio...' },
+  });
 
   const uploadDir = path.join(getUploadDir(), uploadId);
   const inputPath = path.join(uploadDir, 'original.mp3');
@@ -78,14 +81,24 @@ async function processTranscription(jobId: string, uploadId: string): Promise<vo
   // Convert to LINEAR16
   const audioMeta = await convertToLinear16(inputPath, uploadDir);
 
+  updateTranscriptionJob(jobId, {
+    progress: { percent: 10, currentStep: 'Audio converted. Starting transcription...' },
+  });
+
+  // Progress callback — updates the job store so the polling endpoint returns live progress
+  const onProgress: OnProgressCallback = (report) => {
+    updateTranscriptionJob(jobId, { progress: report });
+  };
+
   // Transcribe — pass both the converted WAV and original MP3
   const convertedPath = getConvertedPath(uploadDir);
-  const segments = await transcribe(convertedPath, audioMeta.sampleRateHertz, audioMeta.durationSeconds, inputPath);
+  const segments = await transcribe(convertedPath, audioMeta.sampleRateHertz, audioMeta.durationSeconds, inputPath, onProgress);
 
   const fullText = segments.map((s) => s.text).join(' ');
 
   updateTranscriptionJob(jobId, {
     status: 'completed',
+    progress: { percent: 100, currentStep: 'Complete' },
     segments,
     fullText,
   });

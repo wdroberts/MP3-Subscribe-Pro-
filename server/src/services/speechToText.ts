@@ -225,11 +225,21 @@ async function splitIntoChunks(
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+export interface ProgressReport {
+  percent: number;
+  currentStep: string;
+  chunksTotal?: number;
+  chunksCompleted?: number;
+}
+
+export type OnProgressCallback = (report: ProgressReport) => void;
+
 export async function transcribe(
   audioFilePath: string,
   sampleRateHertz: number,
   durationSeconds: number,
   originalMp3Path?: string,
+  onProgress?: OnProgressCallback,
 ): Promise<TranscriptionSegment[]> {
   console.log(`[STT-v4] transcribe() called. wav=${audioFilePath}, mp3=${originalMp3Path ?? 'none'}, dur=${durationSeconds}s`);
 
@@ -250,27 +260,42 @@ export async function transcribe(
     // --- Path A: MP3 fits inline ---
     if (mp3Size <= MAX_RAW_BYTES) {
       console.log('[STT-v4] >>> Path A: MP3 inline');
+      onProgress?.({ percent: 20, currentStep: 'Transcribing audio...' });
       const buf = await fs.readFile(mp3Path);
       const words = await recognizeBuffer(client, buf, 'MP3', sampleRateHertz, durationSeconds);
+      onProgress?.({ percent: 95, currentStep: 'Finalizing...' });
       return groupWordsIntoSentences(words);
     }
 
     // --- Path B: WAV fits inline ---
     if (wavSize > 0 && wavSize <= MAX_RAW_BYTES) {
       console.log('[STT-v4] >>> Path B: WAV inline');
+      onProgress?.({ percent: 20, currentStep: 'Transcribing audio...' });
       const buf = await fs.readFile(audioFilePath);
       const words = await recognizeBuffer(client, buf, 'LINEAR16', sampleRateHertz, durationSeconds);
+      onProgress?.({ percent: 95, currentStep: 'Finalizing...' });
       return groupWordsIntoSentences(words);
     }
 
     // --- Path C: chunk the MP3 into 3-minute pieces ---
     console.log('[STT-v4] >>> Path C: chunking MP3 into 3-minute pieces');
+    onProgress?.({ percent: 5, currentStep: 'Splitting audio into chunks...' });
     const chunkDir = path.join(path.dirname(mp3Path), 'stt_chunks');
     const chunks = await splitIntoChunks(mp3Path, chunkDir, 180, durationSeconds);
     console.log(`[STT-v4] Created ${chunks.length} chunks`);
 
     const allWords: WordInfo[] = [];
-    for (const chunk of chunks) {
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      // Progress: 10% for splitting, 85% for transcription (spread across chunks), 5% for finalize
+      const chunkPercent = 10 + Math.round((i / chunks.length) * 85);
+      onProgress?.({
+        percent: chunkPercent,
+        currentStep: `Transcribing chunk ${i + 1} of ${chunks.length}...`,
+        chunksTotal: chunks.length,
+        chunksCompleted: i,
+      });
+
       const buf = await fs.readFile(chunk.path);
       if (buf.length > MAX_RAW_BYTES) {
         console.warn(`[STT-v4] Chunk still too large (${(buf.length / 1e6).toFixed(2)}MB), skipping`);
@@ -284,6 +309,13 @@ export async function transcribe(
       }
       allWords.push(...words);
     }
+
+    onProgress?.({
+      percent: 95,
+      currentStep: 'Finalizing...',
+      chunksTotal: chunks.length,
+      chunksCompleted: chunks.length,
+    });
 
     // Cleanup
     await fs.rm(chunkDir, { recursive: true, force: true }).catch(() => {});

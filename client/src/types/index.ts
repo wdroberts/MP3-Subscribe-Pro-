@@ -14,6 +14,13 @@ export interface TranscriptionSegment {
   text: string;
 }
 
+export interface TranscriptionProgress {
+  percent: number;
+  currentStep: string;
+  chunksTotal?: number;
+  chunksCompleted?: number;
+}
+
 export interface TranscriptionResult {
   id: string;
   uploadId: string;
@@ -21,6 +28,7 @@ export interface TranscriptionResult {
   fullText: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   error?: string;
+  progress?: TranscriptionProgress;
   createdAt: string;
 }
 
