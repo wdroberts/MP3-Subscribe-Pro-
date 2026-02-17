@@ -143,6 +143,7 @@ describe('transcribe routes', () => {
         '/data/uploads/up-abc/audio.wav',
         16000,
         10,
+        '/data/uploads/up-abc/original.mp3',
       );
     });
 

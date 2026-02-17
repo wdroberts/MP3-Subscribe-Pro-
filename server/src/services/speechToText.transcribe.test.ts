@@ -1,5 +1,12 @@
 // Tests for the transcribe function and parseSeconds (indirectly)
 
+// Set credentials so getSpeechClient() creates a client from the mocked module
+process.env.GOOGLE_CREDENTIALS_JSON = JSON.stringify({
+  client_email: 'test@test.iam.gserviceaccount.com',
+  private_key: 'fake-key',
+  project_id: 'test-project',
+});
+
 const mockRecognize = jest.fn();
 const mockLongRunningRecognize = jest.fn();
 
@@ -15,6 +22,7 @@ jest.mock('@google-cloud/speech', () => ({
 
 jest.mock('fs/promises', () => ({
   readFile: jest.fn().mockResolvedValue(Buffer.from('fake audio data')),
+  stat: jest.fn().mockResolvedValue({ size: 100 }),
 }));
 
 import { transcribe } from './speechToText';

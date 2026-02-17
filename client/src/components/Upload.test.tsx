@@ -20,7 +20,7 @@ describe('Upload', () => {
 
   it('renders the upload zone with instructions', () => {
     render(<Upload onUploadComplete={onUploadComplete} />);
-    expect(screen.getByText(/Drag & drop an MP3 file/)).toBeInTheDocument();
+    expect(screen.getByText(/Drag & drop an audio file/)).toBeInTheDocument();
   });
 
   it('renders a Choose File button', () => {
@@ -31,7 +31,7 @@ describe('Upload', () => {
   it('renders a file input that accepts MP3 files', () => {
     render(<Upload onUploadComplete={onUploadComplete} />);
     const input = document.querySelector('input[type="file"]');
-    expect(input).toHaveAttribute('accept', '.mp3,audio/mpeg');
+    expect(input).toHaveAttribute('accept', '.mp3,.m4a,.aac,.wav,.ogg,.flac,.webm,audio/*');
   });
 
   it('calls uploadFile and onUploadComplete on successful upload', async () => {

@@ -7,6 +7,7 @@ const mockAudioChannels = jest.fn();
 const mockAudioFrequency = jest.fn();
 const mockAudioCodec = jest.fn();
 const mockFormat = jest.fn();
+const mockDuration = jest.fn();
 
 // Build a chainable mock
 const chainable = {
@@ -14,6 +15,7 @@ const chainable = {
   audioFrequency: mockAudioFrequency,
   audioCodec: mockAudioCodec,
   format: mockFormat,
+  duration: mockDuration,
   on: mockOn,
   save: mockSave,
 };
@@ -22,6 +24,7 @@ mockAudioChannels.mockReturnValue(chainable);
 mockAudioFrequency.mockReturnValue(chainable);
 mockAudioCodec.mockReturnValue(chainable);
 mockFormat.mockReturnValue(chainable);
+mockDuration.mockReturnValue(chainable);
 mockOn.mockReturnValue(chainable);
 mockSave.mockReturnValue(chainable);
 
@@ -43,6 +46,7 @@ describe('audioProcessor (mocked)', () => {
     mockAudioFrequency.mockReturnValue(chainable);
     mockAudioCodec.mockReturnValue(chainable);
     mockFormat.mockReturnValue(chainable);
+    mockDuration.mockReturnValue(chainable);
     mockOn.mockReturnValue(chainable);
     mockSave.mockReturnValue(chainable);
   });
@@ -139,6 +143,19 @@ describe('audioProcessor (mocked)', () => {
     it('returns false when ffprobe errors', async () => {
       mockFfprobe.mockImplementation((_path: string, cb: (err: Error | null, meta: unknown) => void) => {
         cb(new Error('not a media file'), null);
+      });
+
+      // Set up the ffmpeg fallback chain to fire the error callback when save is called
+      let errorCb: ((err: Error) => void) | undefined;
+      mockOn.mockImplementation((event: string, cb: (...args: unknown[]) => void) => {
+        if (event === 'error') {
+          errorCb = cb as (err: Error) => void;
+        }
+        return chainable;
+      });
+      mockSave.mockImplementation(() => {
+        if (errorCb) errorCb(new Error('not a media file'));
+        return chainable;
       });
 
       const result = await validateMp3('/tmp/test.txt');
