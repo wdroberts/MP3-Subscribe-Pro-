@@ -11,6 +11,7 @@ export function createTranscriptionJob(uploadId: string): TranscriptionResult {
     segments: [],
     fullText: '',
     status: 'pending',
+    progress: { percent: 0, currentStep: 'Preparing transcription...' },
     createdAt: new Date().toISOString(),
   };
   transcriptionJobs.set(job.id, job);

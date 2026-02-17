@@ -62,3 +62,16 @@ export function validateMp3(filepath: string): Promise<boolean> {
 export function getConvertedPath(uploadDir: string): string {
   return path.join(uploadDir, 'audio.wav');
 }
+
+/** Fast metadata probe — gets duration without converting the file */
+export function probeAudioMeta(inputPath: string): Promise<AudioMeta> {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(inputPath, (err, metadata) => {
+      if (err) return reject(err);
+      resolve({
+        sampleRateHertz: 16000,
+        durationSeconds: metadata.format.duration || 0,
+      });
+    });
+  });
+}

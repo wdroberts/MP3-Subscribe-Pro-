@@ -284,30 +284,48 @@ export async function transcribe(
     const chunks = await splitIntoChunks(mp3Path, chunkDir, 180, durationSeconds);
     console.log(`[STT-v4] Created ${chunks.length} chunks`);
 
-    const allWords: WordInfo[] = [];
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i];
-      // Progress: 10% for splitting, 85% for transcription (spread across chunks), 5% for finalize
-      const chunkPercent = 10 + Math.round((i / chunks.length) * 85);
-      onProgress?.({
-        percent: chunkPercent,
-        currentStep: `Transcribing chunk ${i + 1} of ${chunks.length}...`,
-        chunksTotal: chunks.length,
-        chunksCompleted: i,
+    // Process chunks in parallel (up to 4 concurrent Google API calls)
+    const MAX_CONCURRENT = 4;
+    let completedChunks = 0;
+    const chunkResults: (WordInfo[] | null)[] = new Array(chunks.length).fill(null);
+
+    // Process in batches of MAX_CONCURRENT
+    for (let batchStart = 0; batchStart < chunks.length; batchStart += MAX_CONCURRENT) {
+      const batchEnd = Math.min(batchStart + MAX_CONCURRENT, chunks.length);
+      const batch = chunks.slice(batchStart, batchEnd);
+
+      const batchPromises = batch.map(async (chunk, batchIdx) => {
+        const chunkIdx = batchStart + batchIdx;
+        const buf = await fs.readFile(chunk.path);
+        if (buf.length > MAX_RAW_BYTES) {
+          console.warn(`[STT-v4] Chunk ${chunkIdx} too large (${(buf.length / 1e6).toFixed(2)}MB), skipping`);
+          return;
+        }
+        const words = await recognizeBuffer(client, buf, 'MP3', 16000, chunk.durSec);
+        // Offset timestamps
+        for (const w of words) {
+          w.startTime += chunk.startSec;
+          w.endTime += chunk.startSec;
+        }
+        chunkResults[chunkIdx] = words;
+
+        completedChunks++;
+        const chunkPercent = 10 + Math.round((completedChunks / chunks.length) * 85);
+        onProgress?.({
+          percent: chunkPercent,
+          currentStep: `Transcribed ${completedChunks} of ${chunks.length} chunks...`,
+          chunksTotal: chunks.length,
+          chunksCompleted: completedChunks,
+        });
       });
 
-      const buf = await fs.readFile(chunk.path);
-      if (buf.length > MAX_RAW_BYTES) {
-        console.warn(`[STT-v4] Chunk still too large (${(buf.length / 1e6).toFixed(2)}MB), skipping`);
-        continue;
-      }
-      const words = await recognizeBuffer(client, buf, 'MP3', 16000, chunk.durSec);
-      // Offset timestamps
-      for (const w of words) {
-        w.startTime += chunk.startSec;
-        w.endTime += chunk.startSec;
-      }
-      allWords.push(...words);
+      await Promise.all(batchPromises);
+    }
+
+    // Reassemble words in order
+    const allWords: WordInfo[] = [];
+    for (const words of chunkResults) {
+      if (words) allWords.push(...words);
     }
 
     onProgress?.({

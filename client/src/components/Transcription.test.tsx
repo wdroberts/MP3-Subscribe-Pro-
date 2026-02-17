@@ -17,31 +17,31 @@ const mockTranscription: TranscriptionResult = {
 describe('Transcription', () => {
   it('renders nothing when status is idle', () => {
     const { container } = render(
-      <Transcription transcription={null} status="idle" error={null} />,
+      <Transcription transcription={null} status="idle" error={null} progress={null} />,
     );
     expect(container.innerHTML).toBe('');
   });
 
   it('shows loading indicator when status is pending', () => {
-    render(<Transcription transcription={null} status="pending" error={null} />);
+    render(<Transcription transcription={null} status="pending" error={null} progress={null} />);
     expect(screen.getByText('Starting transcription...')).toBeInTheDocument();
   });
 
   it('shows loading indicator when status is processing', () => {
-    render(<Transcription transcription={null} status="processing" error={null} />);
+    render(<Transcription transcription={null} status="processing" error={null} progress={null} />);
     expect(screen.getByText('Transcribing audio...')).toBeInTheDocument();
   });
 
   it('shows error message when status is failed', () => {
     render(
-      <Transcription transcription={null} status="failed" error="Something broke" />,
+      <Transcription transcription={null} status="failed" error="Something broke" progress={null} />,
     );
     expect(screen.getByText('Something broke')).toBeInTheDocument();
   });
 
   it('renders segments when status is completed', () => {
     render(
-      <Transcription transcription={mockTranscription} status="completed" error={null} />,
+      <Transcription transcription={mockTranscription} status="completed" error={null} progress={null} />,
     );
     expect(screen.getByText('Hello world.')).toBeInTheDocument();
     expect(screen.getByText('Second sentence.')).toBeInTheDocument();
@@ -49,7 +49,7 @@ describe('Transcription', () => {
 
   it('renders clickable timestamps for each segment', () => {
     render(
-      <Transcription transcription={mockTranscription} status="completed" error={null} />,
+      <Transcription transcription={mockTranscription} status="completed" error={null} progress={null} />,
     );
     const timestamps = screen.getAllByRole('button');
     expect(timestamps).toHaveLength(2);
@@ -58,8 +58,22 @@ describe('Transcription', () => {
 
   it('renders the Transcription heading', () => {
     render(
-      <Transcription transcription={mockTranscription} status="completed" error={null} />,
+      <Transcription transcription={mockTranscription} status="completed" error={null} progress={null} />,
     );
     expect(screen.getByText('Transcription')).toBeInTheDocument();
+  });
+
+  it('shows progress bar when progress object is provided', () => {
+    const mockProgress = {
+      percent: 50,
+      currentStep: 'Transcribed 2 of 4 chunks...',
+      chunksTotal: 4,
+      chunksCompleted: 2,
+    };
+    render(
+      <Transcription transcription={null} status="processing" error={null} progress={mockProgress} />,
+    );
+    expect(screen.getByText('Transcribed 2 of 4 chunks...')).toBeInTheDocument();
+    expect(screen.getByText('50%')).toBeInTheDocument();
   });
 });

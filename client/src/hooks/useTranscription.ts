@@ -49,9 +49,13 @@ export function useTranscription(): UseTranscriptionReturn {
 
             if (result.status === 'completed') {
               setTranscription(result);
-              setStatus('completed');
-              setProgress(null);
+              setProgress({ percent: 100, currentStep: 'Complete' });
               stopPolling();
+              // Brief delay so user sees the 100% bar before it disappears
+              setTimeout(() => {
+                setStatus('completed');
+                setProgress(null);
+              }, 800);
             } else if (result.status === 'failed') {
               setError(result.error || 'Transcription failed');
               setStatus('failed');

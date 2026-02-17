@@ -5,6 +5,7 @@ import * as fileManager from '../services/fileManager';
 import * as audioProcessor from '../services/audioProcessor';
 import * as speechToText from '../services/speechToText';
 import * as jobStore from '../services/jobStore';
+import fsPromises from 'fs/promises';
 
 jest.mock('../services/fileManager');
 jest.mock('../services/audioProcessor');
@@ -18,6 +19,7 @@ const mockedUpdateJob = jest.mocked(jobStore.updateTranscriptionJob);
 const mockedGetJob = jest.mocked(jobStore.getTranscriptionJob);
 const mockedConvertToLinear16 = jest.mocked(audioProcessor.convertToLinear16);
 const mockedGetConvertedPath = jest.mocked(audioProcessor.getConvertedPath);
+const mockedProbeAudioMeta = jest.mocked(audioProcessor.probeAudioMeta);
 const mockedTranscribe = jest.mocked(speechToText.transcribe);
 
 const app = express();
@@ -33,6 +35,8 @@ describe('transcribe routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.spyOn(console, 'error').mockImplementation(() => {});
+    // Default: small file (under 4MB threshold) so tests use the WAV conversion path
+    jest.spyOn(fsPromises, 'stat').mockResolvedValue({ size: 100_000 } as any);
   });
 
   afterEach(() => {
@@ -106,9 +110,13 @@ describe('transcribe routes', () => {
       await flushPromises();
 
       // Should set processing first, then completed
-      expect(mockedUpdateJob).toHaveBeenCalledWith('job-1', { status: 'processing' });
+      expect(mockedUpdateJob).toHaveBeenCalledWith('job-1', {
+        status: 'processing',
+        progress: { percent: 0, currentStep: 'Analyzing audio...' },
+      });
       expect(mockedUpdateJob).toHaveBeenCalledWith('job-1', {
         status: 'completed',
+        progress: { percent: 100, currentStep: 'Complete' },
         segments: [
           { index: 0, startTime: 0, endTime: 2, text: 'Hello world.' },
           { index: 1, startTime: 2, endTime: 4, text: 'Good morning.' },
@@ -144,6 +152,7 @@ describe('transcribe routes', () => {
         16000,
         10,
         '/data/uploads/up-abc/original.mp3',
+        expect.any(Function),
       );
     });
 

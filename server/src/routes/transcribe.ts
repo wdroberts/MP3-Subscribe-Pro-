@@ -1,7 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import path from 'path';
+import fsPromises from 'fs/promises';
 import { uploadExists, getUploadDir } from '../services/fileManager';
-import { convertToLinear16, getConvertedPath } from '../services/audioProcessor';
+import { convertToLinear16, getConvertedPath, probeAudioMeta } from '../services/audioProcessor';
 import { transcribe, OnProgressCallback } from '../services/speechToText';
 import {
   createTranscriptionJob,
@@ -69,30 +70,51 @@ transcribeRouter.get(
   },
 );
 
+// 4 MB threshold — files larger than this go to Path C (MP3 chunking)
+// and don't need WAV conversion at all
+const LARGE_FILE_THRESHOLD = 4_000_000;
+
 async function processTranscription(jobId: string, uploadId: string): Promise<void> {
   updateTranscriptionJob(jobId, {
     status: 'processing',
-    progress: { percent: 0, currentStep: 'Converting audio...' },
+    progress: { percent: 0, currentStep: 'Analyzing audio...' },
   });
 
   const uploadDir = path.join(getUploadDir(), uploadId);
   const inputPath = path.join(uploadDir, 'original.mp3');
-
-  // Convert to LINEAR16
-  const audioMeta = await convertToLinear16(inputPath, uploadDir);
-
-  updateTranscriptionJob(jobId, {
-    progress: { percent: 10, currentStep: 'Audio converted. Starting transcription...' },
-  });
 
   // Progress callback — updates the job store so the polling endpoint returns live progress
   const onProgress: OnProgressCallback = (report) => {
     updateTranscriptionJob(jobId, { progress: report });
   };
 
-  // Transcribe — pass both the converted WAV and original MP3
-  const convertedPath = getConvertedPath(uploadDir);
-  const segments = await transcribe(convertedPath, audioMeta.sampleRateHertz, audioMeta.durationSeconds, inputPath, onProgress);
+  const mp3Size = (await fsPromises.stat(inputPath)).size;
+
+  let segments;
+  if (mp3Size > LARGE_FILE_THRESHOLD) {
+    // Large file — skip WAV conversion, just probe for duration and send MP3 chunks directly
+    const audioMeta = await probeAudioMeta(inputPath);
+
+    updateTranscriptionJob(jobId, {
+      progress: { percent: 5, currentStep: 'Starting transcription...' },
+    });
+
+    segments = await transcribe(inputPath, audioMeta.sampleRateHertz, audioMeta.durationSeconds, inputPath, onProgress);
+  } else {
+    // Small file — convert to WAV (might fit inline as Path A or B)
+    updateTranscriptionJob(jobId, {
+      progress: { percent: 0, currentStep: 'Converting audio...' },
+    });
+
+    const audioMeta = await convertToLinear16(inputPath, uploadDir);
+
+    updateTranscriptionJob(jobId, {
+      progress: { percent: 10, currentStep: 'Audio converted. Starting transcription...' },
+    });
+
+    const convertedPath = getConvertedPath(uploadDir);
+    segments = await transcribe(convertedPath, audioMeta.sampleRateHertz, audioMeta.durationSeconds, inputPath, onProgress);
+  }
 
   const fullText = segments.map((s) => s.text).join(' ');
 

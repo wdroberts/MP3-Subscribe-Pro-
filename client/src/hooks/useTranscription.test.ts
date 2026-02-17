@@ -88,6 +88,11 @@ describe('useTranscription', () => {
       vi.advanceTimersByTime(2000);
     });
 
+    // Advance past the 800ms delay before status changes to 'completed'
+    await act(async () => {
+      vi.advanceTimersByTime(800);
+    });
+
     expect(result.current.status).toBe('completed');
     expect(result.current.transcription?.fullText).toBe('Hello.');
   });
