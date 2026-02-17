@@ -13,7 +13,7 @@ MP3 Transcribe Pro is a web-based application that transcribes MP3 audio files, 
 | Frontend     | React (Vite)                            |
 | Backend      | Node.js with Express                    |
 | Transcription| Google Speech-to-Text API               |
-| Summarization| Hugging Face Transformers API           |
+| Summarization| OpenAI API (GPT)                        |
 | Storage      | Temporary local/cloud storage for MP3s  |
 | Testing      | Jest (unit), Playwright or Cypress (e2e)|
 | Linting      | ESLint + Prettier                       |
@@ -57,7 +57,7 @@ MP3-Subscribe-Pro-/
 │   │   │   └── export.ts      # GET /api/export/:id/:format
 │   │   ├── services/          # Business logic
 │   │   │   ├── speechToText.ts    # Google Speech-to-Text integration
-│   │   │   ├── summarizer.ts      # Hugging Face Transformers integration
+│   │   │   ├── summarizer.ts      # OpenAI GPT integration
 │   │   │   └── fileManager.ts     # Temp file handling
 │   │   ├── middleware/        # Express middleware
 │   │   ├── types/             # Shared type definitions
@@ -72,7 +72,7 @@ MP3-Subscribe-Pro-/
 2. **Transcription** — Backend sends audio to Google Speech-to-Text, returns timestamped text
 3. **Time Ticks** — Each sentence/phrase includes a clickable timestamp
 4. **Text Output** — Transcribed text displayed in a readable, scrollable format
-5. **Summarization** — User can generate a long summary via Hugging Face Transformers
+5. **Summarization** — User can generate a long summary via OpenAI GPT
 6. **Export** — Download as `.txt`, `.srt`, or copy to clipboard
 
 ## Development Commands
@@ -118,8 +118,8 @@ Create a `.env` file in the project root (see `.env.example`):
 GOOGLE_APPLICATION_CREDENTIALS=path/to/service-account.json
 GOOGLE_PROJECT_ID=your-project-id
 
-# Hugging Face
-HUGGINGFACE_API_KEY=your-api-key
+# OpenAI
+OPENAI_API_KEY=your-api-key
 
 # Server
 PORT=3001
@@ -196,11 +196,11 @@ MAX_FILE_SIZE_MB=100
 - Supported encoding: convert MP3 to LINEAR16 or FLAC before sending (use `ffmpeg`)
 - Handle quota limits gracefully with retries and exponential backoff
 
-### Hugging Face Transformers
-- Use the Hugging Face Inference API (`@huggingface/inference` package)
-- Model for summarization: `facebook/bart-large-cnn` or similar
+### OpenAI API
+- Use the OpenAI Chat Completions API with `gpt-4o-mini` model
+- Call `POST https://api.openai.com/v1/chat/completions` with Bearer token auth
 - For long transcriptions, chunk the text and summarize in segments
-- Respect token limits per model (typically 1024 tokens input for BART)
+- `gpt-4o-mini` supports 128k tokens input; current chunk size (3500 chars) is conservative but reliable
 
 ### Audio Processing
 - Use `ffmpeg` for format conversion (MP3 to LINEAR16/FLAC)

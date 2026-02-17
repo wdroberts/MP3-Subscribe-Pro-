@@ -4,14 +4,14 @@ const mockFetch = jest.fn();
 global.fetch = mockFetch as unknown as typeof fetch;
 
 // Set API key so the real summarizer path is used
-process.env.HUGGINGFACE_API_KEY = 'hf_test_key_for_testing';
+process.env.OPENAI_API_KEY = 'sk-test_key_for_testing';
 
 import { summarize } from './summarizer';
 
 function mockFetchResponse(summaryText: string) {
   return {
     ok: true,
-    json: async () => [{ summary_text: summaryText }],
+    json: async () => ({ choices: [{ message: { content: summaryText } }] }),
   };
 }
 
@@ -27,7 +27,7 @@ describe('summarize', () => {
     expect(result).toBe('Short summary.');
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining('facebook/bart-large-cnn'),
+      expect.stringContaining('api.openai.com'),
       expect.objectContaining({
         method: 'POST',
         body: expect.stringContaining('A short text to summarize.'),
@@ -51,8 +51,9 @@ describe('summarize', () => {
     mockFetch.mockImplementation(async (_url: string, options: { body: string }) => {
       chunkCount++;
       const parsed = JSON.parse(options.body);
-      // If the input looks like combined A-summaries, it's the final pass
-      if (parsed.inputs.startsWith('A'.repeat(100))) {
+      // If the user message looks like combined A-summaries, it's the final pass
+      const userMessage = parsed.messages[1].content as string;
+      if (userMessage.includes('A'.repeat(100))) {
         return mockFetchResponse('Final combined summary.');
       }
       return mockFetchResponse('A'.repeat(500));

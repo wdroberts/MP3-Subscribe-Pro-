@@ -23,7 +23,7 @@ React app running at             Express server running at
 http://localhost:5173             http://localhost:3001
 
 You interact with this    --->   This talks to Google and
-part in your browser             Hugging Face APIs for you
+part in your browser             OpenAI APIs for you
 ```
 
 **Frontend** = what you see and click on in your browser (built with React)
@@ -51,7 +51,7 @@ When you click a button in the browser, it sends a request to the backend server
    (Your browser polls the server every 2 seconds to check progress)
 
 4. SUMMARIZE (optional)
-   You click "Generate Summary" --> Server sends the text to Hugging Face AI
+   You click "Generate Summary" --> Server sends the text to OpenAI
    --> AI creates a shorter summary --> Sends it back to your browser
 
 5. EXPORT
@@ -94,13 +94,13 @@ The app uses two Google services:
 
 You'll need to set up a Google Cloud project and get credentials. See the [Environment Variables](#environment-variables) section below.
 
-### 5. Hugging Face Account (for summarization)
+### 5. OpenAI Account (for summarization)
 
-Hugging Face provides the AI model that creates text summaries.
+OpenAI provides the AI model that creates text summaries.
 
-- Create a free account at [huggingface.co](https://huggingface.co/)
-- Go to Settings > Access Tokens > Create a new token
-- You'll put this token in your `.env` file
+- Create an account at [platform.openai.com](https://platform.openai.com/)
+- Go to API keys > Create new secret key
+- You'll put this key in your `.env` file
 
 ## Setup
 
@@ -145,9 +145,9 @@ GOOGLE_REDIRECT_URI=http://localhost:5173
 GOOGLE_APPLICATION_CREDENTIALS=path/to/service-account.json
 GOOGLE_PROJECT_ID=your-project-id
 
-# --- Hugging Face (for summarization) ---
-# Get this from huggingface.co > Settings > Access Tokens
-HUGGINGFACE_API_KEY=your-api-key
+# --- OpenAI (for summarization) ---
+# Get this from platform.openai.com > API keys
+OPENAI_API_KEY=your-api-key
 
 # --- Server settings ---
 PORT=3001
@@ -222,7 +222,7 @@ MP3-Subscribe-Pro-/
     │   │
     │   ├── services/              # Business logic (the "brains" of the backend)
     │   │   ├── speechToText.ts    # Talks to Google Speech-to-Text API
-    │   │   ├── summarizer.ts      # Talks to Hugging Face API, chunks long text
+    │   │   ├── summarizer.ts      # Talks to OpenAI API, chunks long text
     │   │   ├── audioProcessor.ts  # Converts MP3 to WAV using ffmpeg
     │   │   ├── fileManager.ts     # Saves, finds, and cleans up uploaded files
     │   │   └── jobStore.ts        # Tracks transcription/summary job status in memory
@@ -304,7 +304,7 @@ An API (Application Programming Interface) is a way for two programs to communic
 
 - The **frontend** talks to the **backend** through a REST API (HTTP requests to URLs like `/api/upload`)
 - The **backend** talks to **Google Speech-to-Text** through Google's API
-- The **backend** talks to **Hugging Face** through their API
+- The **backend** talks to **OpenAI** through their API
 
 Each API call sends data in a specific format (usually JSON) and gets data back.
 
@@ -426,8 +426,8 @@ Make sure ffmpeg is installed and accessible from your terminal. Run `ffmpeg -ve
 
 ### Summarization fails
 
-- Verify your `HUGGINGFACE_API_KEY` is valid
-- Hugging Face's free tier has rate limits - wait a moment and try again
+- Verify your `OPENAI_API_KEY` is valid
+- OpenAI has rate limits - wait a moment and try again
 - Very short transcriptions may not produce useful summaries
 
 ## Security

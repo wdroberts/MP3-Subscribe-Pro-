@@ -1,5 +1,4 @@
-const MODEL_ID = 'facebook/bart-large-cnn';
-const HF_API_URL = `https://router.huggingface.co/hf-inference/models/${MODEL_ID}`;
+const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
 let _apiKey: string | null = null;
 let _checked = false;
@@ -7,12 +6,12 @@ let _checked = false;
 function getApiKey(): string | null {
   if (!_checked) {
     _checked = true;
-    const key = process.env.HUGGINGFACE_API_KEY;
+    const key = process.env.OPENAI_API_KEY;
     if (key && key !== 'your-api-key') {
-      console.log(`[Summarizer] HF API key found (${key.slice(0, 6)}...)`);
+      console.log(`[Summarizer] OpenAI API key found (${key.slice(0, 6)}...)`);
       _apiKey = key;
     } else {
-      console.warn(`[Summarizer] HUGGINGFACE_API_KEY is ${key ? `"${key}" (placeholder)` : 'not set'}`);
+      console.warn(`[Summarizer] OPENAI_API_KEY is ${key ? `"${key}" (placeholder)` : 'not set'}`);
     }
   }
   return _apiKey;
@@ -54,28 +53,29 @@ function chunkText(text: string): string[] {
 }
 
 async function summarizeChunk(text: string): Promise<string> {
-  const response = await fetch(HF_API_URL, {
+  const response = await fetch(OPENAI_API_URL, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${getApiKey()}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      inputs: text,
-      parameters: {
-        max_length: 300,
-        min_length: 50,
-      },
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You are a helpful assistant that summarizes text concisely.' },
+        { role: 'user', content: `Summarize the following text:\n\n${text}` },
+      ],
+      max_tokens: 500,
     }),
   });
 
   if (!response.ok) {
     const errorBody = await response.text();
-    throw new Error(`HF API ${response.status}: ${errorBody}`);
+    throw new Error(`OpenAI API ${response.status}: ${errorBody}`);
   }
 
-  const result = (await response.json()) as Array<{ summary_text: string }>;
-  return result[0].summary_text;
+  const result = (await response.json()) as { choices: Array<{ message: { content: string } }> };
+  return result.choices[0].message.content;
 }
 
 function extractiveSummarize(text: string): string {
@@ -124,7 +124,7 @@ function extractiveSummarize(text: string): string {
 
 export async function summarize(text: string): Promise<string> {
   if (!getApiKey()) {
-    console.warn('Hugging Face API key not configured — using mock summarization');
+    console.warn('OpenAI API key not configured — using extractive summarization');
     return extractiveSummarize(text);
   }
 
@@ -147,7 +147,7 @@ export async function summarize(text: string): Promise<string> {
     return combined;
   } catch (err) {
     const e = err as Error;
-    console.warn('[Summarizer] HF API failed, using extractive fallback:', e.message);
+    console.warn('[Summarizer] OpenAI API failed, using extractive fallback:', e.message);
     return extractiveSummarize(text);
   }
 }
