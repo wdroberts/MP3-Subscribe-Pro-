@@ -246,6 +246,22 @@ export async function transcribe(
   const client = getSpeechClient();
   if (!client) {
     console.warn('[STT-v4] No Google credentials — returning mock transcription');
+
+    // Simulate gradual progress so the progress bar doesn't jump to 100% instantly
+    if (onProgress) {
+      const steps = [
+        { percent: 10, currentStep: 'Preparing audio...',    delay: 800 },
+        { percent: 30, currentStep: 'Analyzing audio...',    delay: 1200 },
+        { percent: 55, currentStep: 'Transcribing (demo)...', delay: 1200 },
+        { percent: 80, currentStep: 'Processing results...',  delay: 800 },
+        { percent: 95, currentStep: 'Finalizing...',          delay: 500 },
+      ];
+      for (const step of steps) {
+        onProgress({ percent: step.percent, currentStep: step.currentStep });
+        await new Promise((resolve) => setTimeout(resolve, step.delay));
+      }
+    }
+
     return generateMockSegments(durationSeconds);
   }
 
