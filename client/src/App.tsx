@@ -8,7 +8,7 @@ import { UploadResult } from './types/index.ts';
 
 function App() {
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
-  const { startTranscription, transcription, status, error, progress } = useTranscription();
+  const { startTranscription, transcription, status, error, progress, elapsedSeconds } = useTranscription();
 
   const handleUploadComplete = async (result: UploadResult) => {
     setUploadResult(result);
@@ -35,7 +35,7 @@ function App() {
               Upload New File
             </button>
 
-            <Transcription transcription={transcription} status={status} error={error} progress={progress} />
+            <Transcription transcription={transcription} status={status} error={error} progress={progress} elapsedSeconds={elapsedSeconds} />
 
             {status === 'completed' && transcription && (
               <>

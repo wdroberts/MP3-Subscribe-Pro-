@@ -6,9 +6,17 @@ interface TranscriptionProps {
   status: 'idle' | 'pending' | 'processing' | 'completed' | 'failed';
   error: string | null;
   progress: TranscriptionProgress | null;
+  elapsedSeconds: number;
 }
 
-export default function Transcription({ transcription, status, error, progress }: TranscriptionProps) {
+function formatElapsed(totalSeconds: number): string {
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  if (mins === 0) return `${secs}s`;
+  return `${mins}m ${secs.toString().padStart(2, '0')}s`;
+}
+
+export default function Transcription({ transcription, status, error, progress, elapsedSeconds }: TranscriptionProps) {
   if (status === 'idle') return null;
 
   return (
@@ -34,6 +42,9 @@ export default function Transcription({ transcription, status, error, progress }
                     : `${progress.percent}%`}
                 </span>
               </p>
+              {elapsedSeconds > 0 && (
+                <p className="transcription-elapsed">Elapsed: {formatElapsed(elapsedSeconds)}</p>
+              )}
             </div>
           ) : (
             <p>{status === 'pending' ? 'Starting transcription...' : 'Transcribing audio...'}</p>

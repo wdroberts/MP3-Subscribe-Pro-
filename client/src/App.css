@@ -190,6 +190,13 @@ body {
   color: #4a90d9;
 }
 
+.transcription-elapsed {
+  font-size: 0.8rem;
+  color: #888;
+  margin-top: 0.3rem;
+  text-align: center;
+}
+
 .segment-list {
   list-style: none;
 }

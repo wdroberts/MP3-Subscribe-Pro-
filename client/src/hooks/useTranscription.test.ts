@@ -147,7 +147,7 @@ describe('useTranscription', () => {
     expect(result.current.status).toBe('processing');
   });
 
-  it('handles polling errors gracefully', async () => {
+  it('retries on transient poll errors and fails after max retries', async () => {
     mockStartTranscription.mockResolvedValue({ id: 'job-1', status: 'pending' });
     mockPollStatus.mockRejectedValue(new Error('Network error'));
 
@@ -157,11 +157,21 @@ describe('useTranscription', () => {
       await result.current.startTranscription('upload-1');
     });
 
+    // First poll failure — should NOT fail yet (retry logic)
     await act(async () => {
       vi.advanceTimersByTime(2000);
     });
+    expect(result.current.status).toBe('pending');
+    expect(result.current.error).toBeNull();
+
+    // Advance through remaining retries (4 more failures = 5 total)
+    for (let i = 0; i < 4; i++) {
+      await act(async () => {
+        vi.advanceTimersByTime(2000);
+      });
+    }
 
     expect(result.current.status).toBe('failed');
-    expect(result.current.error).toBe('Network error');
+    expect(result.current.error).toContain('Lost connection to server');
   });
 });
