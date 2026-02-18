@@ -243,22 +243,31 @@ export async function transcribe(
 ): Promise<TranscriptionSegment[]> {
   console.log(`[STT-v4] transcribe() called. wav=${audioFilePath}, mp3=${originalMp3Path ?? 'none'}, dur=${durationSeconds}s`);
 
+  const CHUNK_SECONDS = 180;
+
   const client = getSpeechClient();
   if (!client) {
     console.warn('[STT-v4] No Google credentials — returning mock transcription');
 
-    // Simulate gradual progress so the progress bar doesn't jump to 100% instantly
+    // Simulate chunk-by-chunk progress so the bar reflects realistic transcription
     if (onProgress) {
-      const steps = [
-        { percent: 10, currentStep: 'Preparing audio...',    delay: 800 },
-        { percent: 30, currentStep: 'Analyzing audio...',    delay: 1200 },
-        { percent: 55, currentStep: 'Transcribing (demo)...', delay: 1200 },
-        { percent: 80, currentStep: 'Processing results...',  delay: 800 },
-        { percent: 95, currentStep: 'Finalizing...',          delay: 500 },
-      ];
-      for (const step of steps) {
-        onProgress({ percent: step.percent, currentStep: step.currentStep });
-        await new Promise((resolve) => setTimeout(resolve, step.delay));
+      const estimatedChunks = Math.max(1, Math.ceil(durationSeconds / CHUNK_SECONDS));
+      const delayPerChunk = Math.max(400, Math.min(1500, Math.round(6000 / estimatedChunks)));
+
+      onProgress({ percent: 5, currentStep: 'Splitting audio into chunks...', chunksTotal: estimatedChunks, chunksCompleted: 0 });
+      await new Promise((resolve) => setTimeout(resolve, delayPerChunk));
+
+      for (let i = 1; i <= estimatedChunks; i++) {
+        const percent = 10 + Math.round((i / estimatedChunks) * 85);
+        onProgress({
+          percent,
+          currentStep: 'Transcribing audio...',
+          chunksTotal: estimatedChunks,
+          chunksCompleted: i,
+        });
+        if (i < estimatedChunks) {
+          await new Promise((resolve) => setTimeout(resolve, delayPerChunk));
+        }
       }
     }
 
@@ -276,28 +285,29 @@ export async function transcribe(
     // --- Path A: MP3 fits inline ---
     if (mp3Size <= MAX_RAW_BYTES) {
       console.log('[STT-v4] >>> Path A: MP3 inline');
-      onProgress?.({ percent: 20, currentStep: 'Transcribing audio...' });
+      onProgress?.({ percent: 20, currentStep: 'Transcribing audio...', chunksTotal: 1, chunksCompleted: 0 });
       const buf = await fs.readFile(mp3Path);
       const words = await recognizeBuffer(client, buf, 'MP3', sampleRateHertz, durationSeconds);
-      onProgress?.({ percent: 95, currentStep: 'Finalizing...' });
+      onProgress?.({ percent: 95, currentStep: 'Finalizing...', chunksTotal: 1, chunksCompleted: 1 });
       return groupWordsIntoSentences(words);
     }
 
     // --- Path B: WAV fits inline ---
     if (wavSize > 0 && wavSize <= MAX_RAW_BYTES) {
       console.log('[STT-v4] >>> Path B: WAV inline');
-      onProgress?.({ percent: 20, currentStep: 'Transcribing audio...' });
+      onProgress?.({ percent: 20, currentStep: 'Transcribing audio...', chunksTotal: 1, chunksCompleted: 0 });
       const buf = await fs.readFile(audioFilePath);
       const words = await recognizeBuffer(client, buf, 'LINEAR16', sampleRateHertz, durationSeconds);
-      onProgress?.({ percent: 95, currentStep: 'Finalizing...' });
+      onProgress?.({ percent: 95, currentStep: 'Finalizing...', chunksTotal: 1, chunksCompleted: 1 });
       return groupWordsIntoSentences(words);
     }
 
     // --- Path C: chunk the MP3 into 3-minute pieces ---
     console.log('[STT-v4] >>> Path C: chunking MP3 into 3-minute pieces');
-    onProgress?.({ percent: 5, currentStep: 'Splitting audio into chunks...' });
+    const estimatedChunks = Math.ceil(durationSeconds / CHUNK_SECONDS);
+    onProgress?.({ percent: 5, currentStep: 'Splitting audio into chunks...', chunksTotal: estimatedChunks, chunksCompleted: 0 });
     const chunkDir = path.join(path.dirname(mp3Path), 'stt_chunks');
-    const chunks = await splitIntoChunks(mp3Path, chunkDir, 180, durationSeconds);
+    const chunks = await splitIntoChunks(mp3Path, chunkDir, CHUNK_SECONDS, durationSeconds);
     console.log(`[STT-v4] Created ${chunks.length} chunks`);
 
     // Process chunks in parallel (up to 4 concurrent Google API calls)
@@ -329,7 +339,7 @@ export async function transcribe(
         const chunkPercent = 10 + Math.round((completedChunks / chunks.length) * 85);
         onProgress?.({
           percent: chunkPercent,
-          currentStep: `Transcribed ${completedChunks} of ${chunks.length} chunks...`,
+          currentStep: 'Transcribing audio...',
           chunksTotal: chunks.length,
           chunksCompleted: completedChunks,
         });

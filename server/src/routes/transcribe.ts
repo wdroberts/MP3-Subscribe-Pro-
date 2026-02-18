@@ -88,15 +88,17 @@ async function processTranscription(jobId: string, uploadId: string): Promise<vo
     updateTranscriptionJob(jobId, { progress: report });
   };
 
+  const CHUNK_SECONDS = 180;
   const mp3Size = (await fsPromises.stat(inputPath)).size;
 
   let segments;
   if (mp3Size > LARGE_FILE_THRESHOLD) {
     // Large file — skip WAV conversion, just probe for duration and send MP3 chunks directly
     const audioMeta = await probeAudioMeta(inputPath);
+    const estimatedChunks = Math.ceil(audioMeta.durationSeconds / CHUNK_SECONDS);
 
     updateTranscriptionJob(jobId, {
-      progress: { percent: 5, currentStep: 'Starting transcription...' },
+      progress: { percent: 5, currentStep: 'Starting transcription...', chunksTotal: estimatedChunks, chunksCompleted: 0 },
     });
 
     segments = await transcribe(inputPath, audioMeta.sampleRateHertz, audioMeta.durationSeconds, inputPath, onProgress);
@@ -109,7 +111,7 @@ async function processTranscription(jobId: string, uploadId: string): Promise<vo
     const audioMeta = await convertToLinear16(inputPath, uploadDir);
 
     updateTranscriptionJob(jobId, {
-      progress: { percent: 10, currentStep: 'Audio converted. Starting transcription...' },
+      progress: { percent: 10, currentStep: 'Starting transcription...', chunksTotal: 1, chunksCompleted: 0 },
     });
 
     const convertedPath = getConvertedPath(uploadDir);

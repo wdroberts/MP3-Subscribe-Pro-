@@ -28,7 +28,11 @@ export default function Transcription({ transcription, status, error, progress }
               </div>
               <p className="transcription-progress-label">
                 {progress.currentStep}
-                <span className="transcription-progress-percent">{progress.percent}%</span>
+                <span className="transcription-progress-percent">
+                  {progress.chunksTotal != null && progress.chunksTotal > 0
+                    ? `Chunk ${progress.chunksCompleted ?? 0} / ${progress.chunksTotal} · ${progress.percent}%`
+                    : `${progress.percent}%`}
+                </span>
               </p>
             </div>
           ) : (
