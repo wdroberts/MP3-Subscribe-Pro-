@@ -73,7 +73,8 @@ describe('Transcription', () => {
     render(
       <Transcription transcription={null} status="processing" error={null} progress={mockProgress} elapsedSeconds={30} />,
     );
-    expect(screen.getByText('Transcribed 2 of 4 chunks...')).toBeInTheDocument();
-    expect(screen.getByText('Chunk 2 / 4 · 50%')).toBeInTheDocument();
+    expect(screen.getByText('2 of 4 chunks completed')).toBeInTheDocument();
+    expect(screen.getByText(/Transcribed 2 of 4 chunks\.\.\./)).toBeInTheDocument();
+    expect(screen.getByText(/50/)).toBeInTheDocument();
   });
 });

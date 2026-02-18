@@ -29,6 +29,11 @@ export default function Transcription({ transcription, status, error, progress, 
           <div className="spinner" />
           {progress ? (
             <div className="transcription-progress">
+              <p style={{ fontSize: '1.1rem', fontWeight: 600, margin: '0.5rem 0' }}>
+                {progress.chunksTotal != null && progress.chunksTotal > 0
+                  ? `${progress.chunksCompleted ?? 0} of ${progress.chunksTotal} chunks completed`
+                  : progress.currentStep}
+              </p>
               <div className="transcription-progress-bar">
                 <div
                   className="transcription-progress-fill"
@@ -36,12 +41,7 @@ export default function Transcription({ transcription, status, error, progress, 
                 />
               </div>
               <p className="transcription-progress-label">
-                {progress.currentStep}
-                <span className="transcription-progress-percent">
-                  {progress.chunksTotal != null && progress.chunksTotal > 0
-                    ? `Chunk ${progress.chunksCompleted ?? 0} / ${progress.chunksTotal} · ${progress.percent}%`
-                    : `${progress.percent}%`}
-                </span>
+                {progress.currentStep} — {progress.percent}%
               </p>
               {elapsedSeconds > 0 && (
                 <p className="transcription-elapsed">Elapsed: {formatElapsed(elapsedSeconds)}</p>

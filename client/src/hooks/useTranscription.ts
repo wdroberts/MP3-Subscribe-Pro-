@@ -71,6 +71,7 @@ export function useTranscription(): UseTranscriptionReturn {
         const poll = async () => {
           try {
             const result = await pollTranscriptionStatus(id);
+            console.log('[poll] result:', { status: result.status, progress: result.progress });
             // Reset failure counter on successful poll
             consecutiveFailuresRef.current = 0;
 
