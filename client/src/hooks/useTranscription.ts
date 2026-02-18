@@ -13,6 +13,8 @@ interface UseTranscriptionReturn {
 }
 
 const POLL_INTERVAL_MS = 2000;
+// If progress percent doesn't change for this long, warn the user
+const STALL_WARN_MS = 60_000;
 
 export function useTranscription(): UseTranscriptionReturn {
   const [transcription, setTranscription] = useState<TranscriptionResult | null>(null);
@@ -20,6 +22,9 @@ export function useTranscription(): UseTranscriptionReturn {
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<TranscriptionProgress | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastPercentRef = useRef<number>(-1);
+  const lastChangeRef = useRef<number>(Date.now());
+  const stallWarnedRef = useRef<boolean>(false);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -35,6 +40,9 @@ export function useTranscription(): UseTranscriptionReturn {
       setError(null);
       setProgress(null);
       setStatus('pending');
+      lastPercentRef.current = -1;
+      lastChangeRef.current = Date.now();
+      stallWarnedRef.current = false;
 
       try {
         const { id } = await apiStartTranscription(uploadId);
@@ -44,7 +52,24 @@ export function useTranscription(): UseTranscriptionReturn {
             const result = await pollTranscriptionStatus(id);
 
             if (result.progress) {
-              setProgress(result.progress);
+              // Track whether progress is actually advancing
+              if (result.progress.percent !== lastPercentRef.current) {
+                lastPercentRef.current = result.progress.percent;
+                lastChangeRef.current = Date.now();
+                stallWarnedRef.current = false;
+              }
+
+              // If stuck at the same percent for too long, annotate the step
+              const stalledMs = Date.now() - lastChangeRef.current;
+              if (stalledMs > STALL_WARN_MS && !stallWarnedRef.current) {
+                stallWarnedRef.current = true;
+                setProgress({
+                  ...result.progress,
+                  currentStep: `${result.progress.currentStep} (waiting on cloud API...)`,
+                });
+              } else {
+                setProgress(result.progress);
+              }
             }
 
             if (result.status === 'completed') {

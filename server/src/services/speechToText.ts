@@ -136,6 +136,20 @@ function generateMockSegments(durationSeconds: number): TranscriptionSegment[] {
 // 4 MB raw ≈ 5.3 MB base64 — well under Google's 10 MB request limit
 const MAX_RAW_BYTES = 4_000_000;
 
+// 5-minute timeout per chunk — prevents the process from hanging forever
+// when Google API rate-limits or stalls
+const CHUNK_TIMEOUT_MS = 5 * 60 * 1000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Timeout after ${ms / 1000}s: ${label}`)), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
 async function recognizeBuffer(
   client: InstanceType<typeof speech.SpeechClient>,
   buf: Buffer,
@@ -159,11 +173,11 @@ async function recognizeBuffer(
   if (durationSec > 60) {
     console.log('[STT-v4] Using longRunningRecognize (>60s)');
     const [op] = await client.longRunningRecognize({ audio, config });
-    const [resp] = await op.promise();
+    const [resp] = await withTimeout(op.promise(), CHUNK_TIMEOUT_MS, 'longRunningRecognize');
     results = resp.results ?? [];
   } else {
     console.log('[STT-v4] Using recognize (<=60s)');
-    const [resp] = await client.recognize({ audio, config });
+    const [resp] = await withTimeout(client.recognize({ audio, config }), CHUNK_TIMEOUT_MS, 'recognize');
     results = resp.results ?? [];
   }
 
@@ -191,6 +205,7 @@ async function splitIntoChunks(
   outputDir: string,
   chunkSeconds: number,
   totalDuration: number,
+  onChunkCreated?: (created: number, total: number) => void,
 ): Promise<{ path: string; startSec: number; durSec: number }[]> {
   await fs.mkdir(outputDir, { recursive: true });
   const numChunks = Math.ceil(totalDuration / chunkSeconds);
@@ -218,6 +233,7 @@ async function splitIntoChunks(
     if (stat.size > 0) {
       chunks.push({ path: outPath, startSec, durSec });
     }
+    onChunkCreated?.(i + 1, numChunks);
   }
   return chunks;
 }
@@ -305,14 +321,24 @@ export async function transcribe(
     // --- Path C: chunk the MP3 into 3-minute pieces ---
     console.log('[STT-v4] >>> Path C: chunking MP3 into 3-minute pieces');
     const estimatedChunks = Math.ceil(durationSeconds / CHUNK_SECONDS);
-    onProgress?.({ percent: 5, currentStep: 'Splitting audio into chunks...', chunksTotal: estimatedChunks, chunksCompleted: 0 });
+    onProgress?.({ percent: 2, currentStep: 'Splitting audio into chunks...', chunksTotal: estimatedChunks, chunksCompleted: 0 });
     const chunkDir = path.join(path.dirname(mp3Path), 'stt_chunks');
-    const chunks = await splitIntoChunks(mp3Path, chunkDir, CHUNK_SECONDS, durationSeconds);
+    const chunks = await splitIntoChunks(mp3Path, chunkDir, CHUNK_SECONDS, durationSeconds, (created, total) => {
+      const splitPercent = 2 + Math.round((created / total) * 8); // 2-10%
+      onProgress?.({
+        percent: splitPercent,
+        currentStep: `Splitting audio: chunk ${created} / ${total}`,
+        chunksTotal: total,
+        chunksCompleted: 0,
+      });
+    });
     console.log(`[STT-v4] Created ${chunks.length} chunks`);
 
-    // Process chunks in parallel (up to 4 concurrent Google API calls)
-    const MAX_CONCURRENT = 4;
+    // Process chunks in parallel (up to 2 concurrent Google API calls)
+    // Keep concurrency low to avoid rate-limiting on long-running operations
+    const MAX_CONCURRENT = 2;
     let completedChunks = 0;
+    let failedChunks = 0;
     const chunkResults: (WordInfo[] | null)[] = new Array(chunks.length).fill(null);
 
     // Process in batches of MAX_CONCURRENT
@@ -320,6 +346,7 @@ export async function transcribe(
       const batchEnd = Math.min(batchStart + MAX_CONCURRENT, chunks.length);
       const batch = chunks.slice(batchStart, batchEnd);
 
+      // Use Promise.allSettled so one chunk failure doesn't kill the batch
       const batchPromises = batch.map(async (chunk, batchIdx) => {
         const chunkIdx = batchStart + batchIdx;
         const buf = await fs.readFile(chunk.path);
@@ -334,18 +361,33 @@ export async function transcribe(
           w.endTime += chunk.startSec;
         }
         chunkResults[chunkIdx] = words;
+      });
 
-        completedChunks++;
-        const chunkPercent = 10 + Math.round((completedChunks / chunks.length) * 85);
+      const results = await Promise.allSettled(batchPromises);
+      for (let i = 0; i < results.length; i++) {
+        const chunkIdx = batchStart + i;
+        if (results[i].status === 'fulfilled') {
+          completedChunks++;
+        } else {
+          failedChunks++;
+          const reason = (results[i] as PromiseRejectedResult).reason;
+          console.error(`[STT-v4] Chunk ${chunkIdx} failed:`, reason?.message ?? reason);
+        }
+        const processed = completedChunks + failedChunks;
+        const chunkPercent = 10 + Math.round((processed / chunks.length) * 85);
         onProgress?.({
           percent: chunkPercent,
-          currentStep: 'Transcribing audio...',
+          currentStep: failedChunks > 0
+            ? `Transcribing audio... (${failedChunks} chunk${failedChunks > 1 ? 's' : ''} failed)`
+            : 'Transcribing audio...',
           chunksTotal: chunks.length,
           chunksCompleted: completedChunks,
         });
-      });
+      }
+    }
 
-      await Promise.all(batchPromises);
+    if (failedChunks > 0) {
+      console.warn(`[STT-v4] ${failedChunks} of ${chunks.length} chunks failed — partial transcription`);
     }
 
     // Reassemble words in order
@@ -358,13 +400,13 @@ export async function transcribe(
       percent: 95,
       currentStep: 'Finalizing...',
       chunksTotal: chunks.length,
-      chunksCompleted: chunks.length,
+      chunksCompleted: completedChunks,
     });
 
     // Cleanup
     await fs.rm(chunkDir, { recursive: true, force: true }).catch(() => {});
 
-    console.log(`[STT-v4] Total words from all chunks: ${allWords.length}`);
+    console.log(`[STT-v4] Total words from all chunks: ${allWords.length} (${failedChunks} chunks failed)`);
     return groupWordsIntoSentences(allWords);
   } catch (err) {
     console.error('[STT-v4] FAILED:', (err as Error).message);
