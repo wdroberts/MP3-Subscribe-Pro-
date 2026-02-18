@@ -49,7 +49,7 @@ export function useTranscription(): UseTranscriptionReturn {
       stopPolling();
       setTranscription(null);
       setError(null);
-      setProgress(null);
+      setProgress({ percent: 0, currentStep: 'Starting transcription...' });
       setStatus('pending');
       setElapsedSeconds(0);
       lastPercentRef.current = -1;
@@ -136,8 +136,8 @@ export function useTranscription(): UseTranscriptionReturn {
           pollRef.current = setTimeout(poll, POLL_INTERVAL_MS);
         };
 
-        // Start first poll after delay
-        pollRef.current = setTimeout(poll, POLL_INTERVAL_MS);
+        // Fire first poll immediately to get backend progress ASAP
+        pollRef.current = setTimeout(poll, 0);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to start transcription');
         setStatus('failed');

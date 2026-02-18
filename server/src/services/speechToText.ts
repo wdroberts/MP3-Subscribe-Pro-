@@ -334,9 +334,9 @@ export async function transcribe(
     });
     console.log(`[STT-v4] Created ${chunks.length} chunks`);
 
-    // Process chunks in parallel (up to 2 concurrent Google API calls)
-    // Keep concurrency low to avoid rate-limiting on long-running operations
-    const MAX_CONCURRENT = 2;
+    // Process chunks through a concurrent pool — always keep MAX_CONCURRENT
+    // in flight so there are no idle slots between completions.
+    const MAX_CONCURRENT = 5;
     let completedChunks = 0;
     let failedChunks = 0;
     const chunkResults: (WordInfo[] | null)[] = new Array(chunks.length).fill(null);
@@ -356,40 +356,57 @@ export async function transcribe(
       });
     }
 
-    // Process in batches of MAX_CONCURRENT
-    for (let batchStart = 0; batchStart < chunks.length; batchStart += MAX_CONCURRENT) {
-      const batchEnd = Math.min(batchStart + MAX_CONCURRENT, chunks.length);
-      const batch = chunks.slice(batchStart, batchEnd);
-
-      // Each chunk reports progress immediately on completion (not waiting for the batch)
-      const batchPromises = batch.map(async (chunk, batchIdx) => {
-        const chunkIdx = batchStart + batchIdx;
-        try {
-          const buf = await fs.readFile(chunk.path);
-          if (buf.length > MAX_RAW_BYTES) {
-            console.warn(`[STT-v4] Chunk ${chunkIdx} too large (${(buf.length / 1e6).toFixed(2)}MB), skipping`);
-            failedChunks++;
-            reportChunkProgress();
-            return;
-          }
-          const words = await recognizeBuffer(client, buf, 'MP3', 16000, chunk.durSec);
-          // Offset timestamps
-          for (const w of words) {
-            w.startTime += chunk.startSec;
-            w.endTime += chunk.startSec;
-          }
-          chunkResults[chunkIdx] = words;
-          completedChunks++;
-          reportChunkProgress();
-        } catch (err) {
+    // Process a single chunk
+    async function processChunk(chunkIdx: number): Promise<void> {
+      const chunk = chunks[chunkIdx];
+      try {
+        const buf = await fs.readFile(chunk.path);
+        if (buf.length > MAX_RAW_BYTES) {
+          console.warn(`[STT-v4] Chunk ${chunkIdx} too large (${(buf.length / 1e6).toFixed(2)}MB), skipping`);
           failedChunks++;
-          console.error(`[STT-v4] Chunk ${chunkIdx} failed:`, (err as Error)?.message ?? err);
           reportChunkProgress();
+          return;
         }
-      });
-
-      await Promise.allSettled(batchPromises);
+        const words = await recognizeBuffer(client!, buf, 'MP3', 16000, chunk.durSec);
+        // Offset timestamps
+        for (const w of words) {
+          w.startTime += chunk.startSec;
+          w.endTime += chunk.startSec;
+        }
+        chunkResults[chunkIdx] = words;
+        completedChunks++;
+        reportChunkProgress();
+      } catch (err) {
+        failedChunks++;
+        console.error(`[STT-v4] Chunk ${chunkIdx} failed:`, (err as Error)?.message ?? err);
+        reportChunkProgress();
+      }
     }
+
+    // Concurrent pool: always keep up to MAX_CONCURRENT chunks in flight.
+    // As soon as one finishes, the next starts immediately — no idle slots.
+    await new Promise<void>((resolve) => {
+      let nextIdx = 0;
+      let running = 0;
+
+      function launch(): void {
+        while (running < MAX_CONCURRENT && nextIdx < chunks.length) {
+          const idx = nextIdx++;
+          running++;
+          processChunk(idx).finally(() => {
+            running--;
+            if (nextIdx < chunks.length) {
+              launch();
+            } else if (running === 0) {
+              resolve();
+            }
+          });
+        }
+        // Edge case: no chunks at all
+        if (chunks.length === 0) resolve();
+      }
+      launch();
+    });
 
     if (failedChunks > 0) {
       console.warn(`[STT-v4] ${failedChunks} of ${chunks.length} chunks failed — partial transcription`);
