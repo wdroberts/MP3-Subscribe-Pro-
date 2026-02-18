@@ -62,7 +62,6 @@ transcribeRouter.get(
       if (job.status === 'completed') {
         res.json(job);
       } else {
-        console.log(`[status] job=${job.id} status=${job.status} progress=${JSON.stringify(job.progress)}`);
         res.json({ id: job.id, status: job.status, error: job.error, progress: job.progress });
       }
     } catch (err) {

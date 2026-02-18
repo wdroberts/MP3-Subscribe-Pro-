@@ -60,7 +60,6 @@ export function useTranscription(): UseTranscriptionReturn {
 
       try {
         const { id } = await apiStartTranscription(uploadId);
-        console.log('[Transcription] Started job:', id);
 
         // Update elapsed time every second
         elapsedRef.current = setInterval(() => {
@@ -71,7 +70,6 @@ export function useTranscription(): UseTranscriptionReturn {
         const poll = async () => {
           try {
             const result = await pollTranscriptionStatus(id);
-            console.log('[poll] result:', { status: result.status, progress: result.progress });
             // Reset failure counter on successful poll
             consecutiveFailuresRef.current = 0;
 
@@ -97,7 +95,6 @@ export function useTranscription(): UseTranscriptionReturn {
             }
 
             if (result.status === 'completed') {
-              console.log('[Transcription] Completed');
               setTranscription(result);
               setProgress({ percent: 100, currentStep: 'Complete' });
               stopPolling();
@@ -108,7 +105,6 @@ export function useTranscription(): UseTranscriptionReturn {
               }, 800);
               return; // Don't schedule next poll
             } else if (result.status === 'failed') {
-              console.warn('[Transcription] Failed:', result.error);
               setError(result.error || 'Transcription failed');
               setStatus('failed');
               setProgress(null);

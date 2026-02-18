@@ -17,7 +17,6 @@ function formatElapsed(totalSeconds: number): string {
 }
 
 export default function Transcription({ transcription, status, error, progress, elapsedSeconds }: TranscriptionProps) {
-  console.log('[Transcription] render:', { status, hasProgress: !!progress, percent: progress?.percent });
   if (status === 'idle') return null;
 
   return (

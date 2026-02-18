@@ -4,7 +4,6 @@ import {
   getUploadDir,
   ensureUploadDir,
   saveUpload,
-  getFilePath,
   uploadExists,
   cleanupUpload,
   cleanupStaleUploads,
@@ -62,13 +61,6 @@ describe('fileManager', () => {
         '/tmp/abc123',
         path.join(UPLOAD_DIR, 'test-uuid-1234', 'original.mp3'),
       );
-    });
-  });
-
-  describe('getFilePath', () => {
-    it('returns the full file path', () => {
-      const result = getFilePath('upload-id', 'audio.wav');
-      expect(result).toBe(path.join(UPLOAD_DIR, 'upload-id', 'audio.wav'));
     });
   });
 

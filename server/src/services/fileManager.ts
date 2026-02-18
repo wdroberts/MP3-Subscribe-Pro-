@@ -31,10 +31,6 @@ export async function saveUpload(file: Express.Multer.File): Promise<UploadResul
   };
 }
 
-export function getFilePath(uploadId: string, filename: string): string {
-  return path.join(UPLOAD_DIR, uploadId, filename);
-}
-
 export async function uploadExists(uploadId: string): Promise<boolean> {
   try {
     await fs.access(path.join(UPLOAD_DIR, uploadId, 'original.mp3'));
