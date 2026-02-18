@@ -341,49 +341,54 @@ export async function transcribe(
     let failedChunks = 0;
     const chunkResults: (WordInfo[] | null)[] = new Array(chunks.length).fill(null);
 
+    // Helper: report progress immediately when any chunk settles
+    function reportChunkProgress(): void {
+      const processed = completedChunks + failedChunks;
+      const chunkPercent = 10 + Math.round((processed / chunks.length) * 85);
+      console.log(`[STT-v4] Progress: ${chunkPercent}% — ${completedChunks} done, ${failedChunks} failed, ${chunks.length - processed} remaining`);
+      onProgress?.({
+        percent: chunkPercent,
+        currentStep: failedChunks > 0
+          ? `Transcribing audio... (${failedChunks} chunk${failedChunks > 1 ? 's' : ''} failed)`
+          : 'Transcribing audio...',
+        chunksTotal: chunks.length,
+        chunksCompleted: completedChunks,
+      });
+    }
+
     // Process in batches of MAX_CONCURRENT
     for (let batchStart = 0; batchStart < chunks.length; batchStart += MAX_CONCURRENT) {
       const batchEnd = Math.min(batchStart + MAX_CONCURRENT, chunks.length);
       const batch = chunks.slice(batchStart, batchEnd);
 
-      // Use Promise.allSettled so one chunk failure doesn't kill the batch
+      // Each chunk reports progress immediately on completion (not waiting for the batch)
       const batchPromises = batch.map(async (chunk, batchIdx) => {
         const chunkIdx = batchStart + batchIdx;
-        const buf = await fs.readFile(chunk.path);
-        if (buf.length > MAX_RAW_BYTES) {
-          console.warn(`[STT-v4] Chunk ${chunkIdx} too large (${(buf.length / 1e6).toFixed(2)}MB), skipping`);
-          return;
+        try {
+          const buf = await fs.readFile(chunk.path);
+          if (buf.length > MAX_RAW_BYTES) {
+            console.warn(`[STT-v4] Chunk ${chunkIdx} too large (${(buf.length / 1e6).toFixed(2)}MB), skipping`);
+            failedChunks++;
+            reportChunkProgress();
+            return;
+          }
+          const words = await recognizeBuffer(client, buf, 'MP3', 16000, chunk.durSec);
+          // Offset timestamps
+          for (const w of words) {
+            w.startTime += chunk.startSec;
+            w.endTime += chunk.startSec;
+          }
+          chunkResults[chunkIdx] = words;
+          completedChunks++;
+          reportChunkProgress();
+        } catch (err) {
+          failedChunks++;
+          console.error(`[STT-v4] Chunk ${chunkIdx} failed:`, (err as Error)?.message ?? err);
+          reportChunkProgress();
         }
-        const words = await recognizeBuffer(client, buf, 'MP3', 16000, chunk.durSec);
-        // Offset timestamps
-        for (const w of words) {
-          w.startTime += chunk.startSec;
-          w.endTime += chunk.startSec;
-        }
-        chunkResults[chunkIdx] = words;
       });
 
-      const results = await Promise.allSettled(batchPromises);
-      for (let i = 0; i < results.length; i++) {
-        const chunkIdx = batchStart + i;
-        if (results[i].status === 'fulfilled') {
-          completedChunks++;
-        } else {
-          failedChunks++;
-          const reason = (results[i] as PromiseRejectedResult).reason;
-          console.error(`[STT-v4] Chunk ${chunkIdx} failed:`, reason?.message ?? reason);
-        }
-        const processed = completedChunks + failedChunks;
-        const chunkPercent = 10 + Math.round((processed / chunks.length) * 85);
-        onProgress?.({
-          percent: chunkPercent,
-          currentStep: failedChunks > 0
-            ? `Transcribing audio... (${failedChunks} chunk${failedChunks > 1 ? 's' : ''} failed)`
-            : 'Transcribing audio...',
-          chunksTotal: chunks.length,
-          chunksCompleted: completedChunks,
-        });
-      }
+      await Promise.allSettled(batchPromises);
     }
 
     if (failedChunks > 0) {
