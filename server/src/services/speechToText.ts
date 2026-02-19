@@ -55,11 +55,10 @@ function getSpeechClient(): InstanceType<typeof speech.SpeechClient> | null {
   try {
     const projectRoot = path.resolve(__dirname, '../../..');
     const resolved = path.resolve(projectRoot, creds);
-    console.log(`[STT-v4] Resolved credentials path: ${resolved}`);
     fsSync.accessSync(resolved);
     process.env.GOOGLE_APPLICATION_CREDENTIALS = resolved;
     _client = new speech.SpeechClient();
-    console.log('[STT-v4] Google Speech client initialized, credentials:', resolved);
+    console.log('[STT-v4] Google Speech client initialized from credentials file');
   } catch {
     console.warn('[STT-v4] Credentials file not found at resolved path. GOOGLE_APPLICATION_CREDENTIALS:', creds);
     console.warn('[STT-v4] Ensure the service account JSON file exists in the project root.');

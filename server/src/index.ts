@@ -24,11 +24,11 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+}));
 app.use(express.json());
-if (process.env.NODE_ENV !== 'development') {
-  app.use(createRateLimiter());
-}
+app.use(createRateLimiter());
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });

@@ -8,10 +8,10 @@ function getApiKey(): string | null {
     _checked = true;
     const key = process.env.OPENAI_API_KEY;
     if (key && key !== 'your-api-key') {
-      console.log(`[Summarizer] OpenAI API key found (${key.slice(0, 6)}...)`);
+      console.log('[Summarizer] OpenAI API key configured');
       _apiKey = key;
     } else {
-      console.warn(`[Summarizer] OPENAI_API_KEY is ${key ? `"${key}" (placeholder)` : 'not set'}`);
+      console.warn('[Summarizer] OPENAI_API_KEY is not set or is a placeholder');
     }
   }
   return _apiKey;
