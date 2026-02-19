@@ -8,12 +8,13 @@
     "server"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev --workspace=server\" \"npm run dev --workspace=client\"",
+    "dev": "concurrently --kill-others \"npm run dev --workspace=server\" \"npm run dev --workspace=client\"",
     "build": "npm run build --workspace=server && npm run build --workspace=client",
     "test": "npm run test --workspace=server && npm run test --workspace=client",
     "test:coverage": "npm run test:coverage --workspace=server && npm run test:coverage --workspace=client",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write \"**/*.{ts,tsx,json,css,html}\"",
+    "start": "npm run start --workspace=server",
     "typecheck": "npm run typecheck --workspace=server && npm run typecheck --workspace=client"
   },
   "devDependencies": {

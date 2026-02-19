@@ -155,6 +155,48 @@ body {
   }
 }
 
+/* Transcription progress bar */
+.transcription-progress {
+  width: 100%;
+  max-width: 400px;
+  margin: 0.75rem auto 0;
+}
+
+.transcription-progress-bar {
+  height: 10px;
+  background: #e0e0e0;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.transcription-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4a90d9, #357abd);
+  border-radius: 5px;
+  transition: width 0.5s ease;
+}
+
+.transcription-progress-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  color: #555;
+  margin-top: 0.5rem;
+}
+
+.transcription-progress-percent {
+  font-weight: 600;
+  color: #4a90d9;
+}
+
+.transcription-elapsed {
+  font-size: 0.8rem;
+  color: #888;
+  margin-top: 0.3rem;
+  text-align: center;
+}
+
 .segment-list {
   list-style: none;
 }

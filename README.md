@@ -1,60 +1,207 @@
 # MP3 Transcribe Pro
 
-A web-based application that transcribes MP3 audio files, inserts time ticks, and offers text summarization.
+A web application that converts MP3 audio files into timestamped text
+transcriptions with AI-powered summarization.
+
+Upload an MP3 file, get a full transcription with clickable timestamps, generate
+a summary, and export the results.
 
 ## Features
 
-- **MP3 Upload** — Upload audio files with a progress bar
-- **Transcription** — Automatic transcription via Google Speech-to-Text
-- **Time Ticks** — Clickable timestamps for each sentence/phrase
-- **Summarization** — Generate long summaries via Hugging Face Transformers
-- **Export** — Download as TXT, SRT, or copy to clipboard
+- **MP3 Upload** with real-time progress bar
+- **Speech-to-Text** transcription powered by Google Cloud
+- **Clickable Timestamps** on every sentence
+- **Live Progress** showing "X of Y chunks completed" during transcription
+- **AI Summarization** using OpenAI GPT
+- **Export** as `.txt`, `.srt` (subtitles), or copy to clipboard
 
-## Prerequisites
+## Quick Start
 
-- Node.js >= 18
-- npm >= 9
-- ffmpeg installed and available in PATH
-- Google Cloud service account with Speech-to-Text API enabled
-- Hugging Face API key
+### What you need installed
 
-## Setup
+- [Node.js](https://nodejs.org) version 18 or higher (includes npm)
+- [ffmpeg](https://ffmpeg.org) for audio processing
+
+**Install ffmpeg:**
+
+| OS      | Command                        |
+|---------|--------------------------------|
+| Windows | `winget install ffmpeg`        |
+| Mac     | `brew install ffmpeg`          |
+| Linux   | `sudo apt install ffmpeg`      |
+
+### 1. Clone the repository
 
 ```bash
-# Clone the repository
 git clone https://github.com/wdroberts/MP3-Subscribe-Pro-.git
 cd MP3-Subscribe-Pro-
+```
 
-# Install dependencies
+### 2. Install dependencies
+
+```bash
 npm install
+```
 
-# Copy environment variables
+This installs everything for both the frontend and backend automatically.
+
+### 3. Set up your API keys
+
+Copy the example environment file:
+
+```bash
+# Mac/Linux
 cp .env.example .env
-# Edit .env with your API keys
 
-# Start development servers
+# Windows (Command Prompt)
+copy .env.example .env
+```
+
+Open the `.env` file in a text editor and add your keys:
+
+```
+# Google Speech-to-Text
+# You need a Google Cloud account with the Speech-to-Text API enabled.
+# Create a service account and download the JSON key file.
+# Learn how: https://cloud.google.com/speech-to-text/docs/before-you-begin
+GOOGLE_APPLICATION_CREDENTIALS=path/to/your-service-account-key.json
+GOOGLE_PROJECT_ID=your-google-project-id
+
+# OpenAI (for the summarization feature)
+# Get a key from: https://platform.openai.com/api-keys
+OPENAI_API_KEY=sk-your-key-here
+
+# You can leave the rest as defaults
+PORT=3001
+NODE_ENV=development
+UPLOAD_DIR=./tmp/uploads
+MAX_FILE_SIZE_MB=100
+```
+
+> **Note:** If you don't have Google credentials, the app will still run using
+> mock transcription data so you can test the UI.
+
+### 4. Start the app
+
+```bash
 npm run dev
 ```
 
-The client runs at `http://localhost:5173` and the server at `http://localhost:3001`.
+This starts both servers:
+- **Frontend:** http://localhost:5173 (open this in your browser)
+- **Backend:** http://localhost:3001
 
-## Scripts
+### 5. Use it
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start both client and server in dev mode |
-| `npm run build` | Build both workspaces for production |
-| `npm test` | Run all tests |
-| `npm run test:coverage` | Run tests with coverage |
-| `npm run lint` | Lint all TypeScript files |
-| `npm run format` | Format code with Prettier |
-| `npm run typecheck` | Type-check both workspaces |
+1. Open http://localhost:5173
+2. Click "Upload" and select an MP3 file
+3. Wait for the transcription (you'll see "X of Y chunks completed")
+4. Read the timestamped transcription
+5. Click "Summarize" to generate an AI summary
+6. Click "Export" to download as `.txt` or `.srt`
 
-## Architecture
+## Project Structure
+
+The project has two main parts:
 
 ```
-client/   — React + Vite + TypeScript frontend
-server/   — Node.js + Express + TypeScript backend
+MP3-Subscribe-Pro-/
+├── client/          Frontend (React) — what you see in the browser
+├── server/          Backend (Express) — handles uploads, transcription, etc.
+├── package.json     Root config that ties both together
+└── .env.example     Template for your secret API keys
 ```
 
-The client proxies `/api` requests to the Express server during development. In production, the client build can be served statically from Express.
+**Frontend (`client/src/`):**
+
+| File/Folder      | What it does                                           |
+|------------------|--------------------------------------------------------|
+| `App.tsx`        | Main app — controls which screen is shown              |
+| `components/`    | UI pieces: Upload, Transcription, Summary, Export      |
+| `hooks/`         | `useTranscription` and `useSummarization` — app logic  |
+| `services/api.ts`| Functions that call the backend API                    |
+
+**Backend (`server/src/`):**
+
+| File/Folder      | What it does                                           |
+|------------------|--------------------------------------------------------|
+| `index.ts`       | Starts the server                                      |
+| `routes/`        | Handles HTTP requests (upload, transcribe, etc.)       |
+| `services/`      | Core logic: speech-to-text, summarizer, file handling  |
+| `middleware/`     | Error handling and rate limiting                       |
+
+## Available Commands
+
+Run these from the project root folder:
+
+| Command              | What it does                                        |
+|----------------------|-----------------------------------------------------|
+| `npm run dev`        | Start both frontend and backend for development     |
+| `npm test`           | Run all tests                                       |
+| `npm run typecheck`  | Check TypeScript types (finds errors without running)|
+| `npm run lint`       | Check code style                                    |
+| `npm run format`     | Auto-fix code formatting                            |
+| `npm run build`      | Build for production deployment                     |
+
+## How It Works
+
+Here's what happens when you transcribe a file:
+
+```
+You upload an MP3
+       |
+       v
+Backend saves the file
+       |
+       v
+Audio is split into 3-minute chunks
+       |
+       v
+Each chunk is sent to Google Speech-to-Text
+(up to 5 chunks at the same time for speed)
+       |
+       v
+Frontend polls every 2 seconds:
+"3 of 10 chunks completed"
+       |
+       v
+All chunks done — timestamps are assembled
+       |
+       v
+Transcription displayed with clickable timestamps
+```
+
+## Troubleshooting
+
+**"ffmpeg not found" error:**
+Make sure ffmpeg is installed and available in your PATH. Run `ffmpeg -version`
+to check.
+
+**Transcription returns mock/fake data:**
+This means Google credentials are not configured. Check your `.env` file and
+make sure `GOOGLE_APPLICATION_CREDENTIALS` points to a valid service account
+JSON file.
+
+**"Failed to start transcription" error:**
+Make sure the backend is running (`npm run dev` should start both servers). Check
+the terminal for error messages.
+
+**Upload fails with "File too large":**
+The default limit is 100 MB. You can change `MAX_FILE_SIZE_MB` in your `.env`
+file.
+
+## API Reference
+
+If you want to call the backend directly (for testing or building other tools):
+
+| Method | Endpoint                     | Body / Params                  | Returns                           |
+|--------|------------------------------|--------------------------------|-----------------------------------|
+| POST   | `/api/upload`                | Form data with `file` field    | `{ id, filename, sizeBytes, ... }`|
+| POST   | `/api/transcribe`            | `{ "uploadId": "..." }`       | `{ id, status: "pending" }`       |
+| GET    | `/api/transcribe/:id/status` | —                              | `{ status, progress, segments? }` |
+| POST   | `/api/summarize`             | `{ "transcriptionId": "..." }`| `{ id, summary }`                 |
+| GET    | `/api/export/:id/:format`    | format: `txt`, `srt`, or `json`| File download                    |
+
+## License
+
+This project is private.

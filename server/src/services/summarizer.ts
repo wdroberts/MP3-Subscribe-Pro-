@@ -1,8 +1,21 @@
-import { HfInference } from '@huggingface/inference';
+const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
-const hf = new HfInference(process.env.HUGGINGFACE_API_KEY);
+let _apiKey: string | null = null;
+let _checked = false;
 
-const MODEL_ID = 'facebook/bart-large-cnn';
+function getApiKey(): string | null {
+  if (!_checked) {
+    _checked = true;
+    const key = process.env.OPENAI_API_KEY;
+    if (key && key !== 'your-api-key') {
+      console.log('[Summarizer] OpenAI API key configured');
+      _apiKey = key;
+    } else {
+      console.warn('[Summarizer] OPENAI_API_KEY is not set or is a placeholder');
+    }
+  }
+  return _apiKey;
+}
 const MAX_CHUNK_CHARS = 3500;
 const OVERLAP_CHARS = 200;
 
@@ -40,34 +53,112 @@ function chunkText(text: string): string[] {
 }
 
 async function summarizeChunk(text: string): Promise<string> {
-  const result = await hf.summarization({
-    model: MODEL_ID,
-    inputs: text,
-    parameters: {
-      max_length: 300,
-      min_length: 50,
-    },
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+
+  let response: Response;
+  try {
+    response = await fetch(OPENAI_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${getApiKey()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant that summarizes text concisely.' },
+          { role: 'user', content: `Summarize the following text:\n\n${text}` },
+        ],
+        max_tokens: 500,
+      }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`OpenAI API ${response.status}: ${errorBody}`);
+  }
+
+  const result = (await response.json()) as { choices: Array<{ message: { content: string } }> };
+  return result.choices[0].message.content;
+}
+
+function extractiveSummarize(text: string): string {
+  const sentences = text
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 20);
+
+  if (sentences.length <= 5) {
+    return sentences.join(' ');
+  }
+
+  // Score sentences by word frequency (simple extractive approach)
+  const wordFreq = new Map<string, number>();
+  const words = text.toLowerCase().match(/\b[a-z]{3,}\b/g) || [];
+  // Filter common stop words
+  const stopWords = new Set([
+    'the', 'and', 'that', 'this', 'with', 'for', 'are', 'but', 'not', 'you',
+    'all', 'can', 'had', 'her', 'was', 'one', 'our', 'out', 'has', 'have',
+    'from', 'they', 'been', 'said', 'each', 'which', 'their', 'will', 'other',
+    'about', 'many', 'then', 'them', 'these', 'some', 'would', 'into', 'more',
+    'could', 'such', 'what', 'its', 'than', 'also', 'just', 'know', 'really',
+  ]);
+  for (const w of words) {
+    if (!stopWords.has(w)) {
+      wordFreq.set(w, (wordFreq.get(w) || 0) + 1);
+    }
+  }
+
+  // Score each sentence
+  const scored = sentences.map((sentence, index) => {
+    const sWords = sentence.toLowerCase().match(/\b[a-z]{3,}\b/g) || [];
+    const score = sWords.reduce((sum, w) => sum + (wordFreq.get(w) || 0), 0) / (sWords.length || 1);
+    return { sentence, score, index };
   });
-  return result.summary_text;
+
+  // Pick top sentences, preserving original order
+  const topCount = Math.max(3, Math.ceil(sentences.length * 0.2));
+  const top = scored
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topCount)
+    .sort((a, b) => a.index - b.index);
+
+  return top.map((t) => t.sentence).join(' ');
 }
 
 export async function summarize(text: string): Promise<string> {
-  const chunks = chunkText(text);
-
-  if (chunks.length === 1) {
-    return summarizeChunk(chunks[0]);
+  if (!getApiKey()) {
+    console.warn('OpenAI API key not configured — using extractive summarization');
+    return extractiveSummarize(text);
   }
 
-  // Summarize each chunk
-  const chunkSummaries = await Promise.all(chunks.map(summarizeChunk));
-  const combined = chunkSummaries.join(' ');
+  try {
+    const chunks = chunkText(text);
 
-  // If the combined summaries are still long, do a final pass
-  if (combined.length > MAX_CHUNK_CHARS) {
-    return summarizeChunk(combined);
+    if (chunks.length === 1) {
+      return await summarizeChunk(chunks[0]);
+    }
+
+    // Summarize each chunk
+    const chunkSummaries = await Promise.all(chunks.map(summarizeChunk));
+    const combined = chunkSummaries.join(' ');
+
+    // If the combined summaries are still long, do a final pass
+    if (combined.length > MAX_CHUNK_CHARS) {
+      return await summarizeChunk(combined);
+    }
+
+    return combined;
+  } catch (err) {
+    const e = err as Error;
+    console.warn('[Summarizer] OpenAI API failed, using extractive fallback:', e.message);
+    return extractiveSummarize(text);
   }
-
-  return combined;
 }
 
 // Exported for testing

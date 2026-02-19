@@ -2,12 +2,14 @@ import { Request, Response, NextFunction } from 'express';
 import { MulterError } from 'multer';
 import { ApiErrorResponse } from '../types';
 
+/* eslint-disable @typescript-eslint/no-unused-vars */
 export function errorHandler(
   err: Error,
   _req: Request,
   res: Response<ApiErrorResponse>,
   _next: NextFunction,
 ): void {
+  /* eslint-enable @typescript-eslint/no-unused-vars */
   console.error('Error:', err.message);
 
   if (err instanceof MulterError) {
@@ -20,9 +22,14 @@ export function errorHandler(
   }
 
   const statusCode = (err as { statusCode?: number }).statusCode || 500;
-  const response: ApiErrorResponse = { error: err.message || 'Internal server error' };
+  const isProduction = process.env.NODE_ENV === 'production';
+  const response: ApiErrorResponse = {
+    error: isProduction && statusCode >= 500
+      ? 'Internal server error'
+      : err.message || 'Internal server error',
+  };
 
-  if (process.env.NODE_ENV === 'development') {
+  if (!isProduction) {
     response.details = err.stack;
   }
 

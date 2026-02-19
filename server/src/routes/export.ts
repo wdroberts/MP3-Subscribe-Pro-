@@ -1,11 +1,13 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { getTranscriptionJob } from '../services/jobStore';
 import { toSrt, toTimestampedText } from '../utils/formatters';
+import { createRateLimiter } from '../middleware/rateLimiter';
 
 export const exportRouter = Router();
 
 exportRouter.get(
   '/:id/:format',
+  createRateLimiter(),
   async (req: Request<{ id: string; format: string }>, res: Response, next: NextFunction) => {
     try {
       const { id, format } = req.params;

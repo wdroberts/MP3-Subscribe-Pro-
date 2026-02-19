@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsc && node --watch dist/index.js",
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "jest",
@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@google-cloud/speech": "^6.7.0",
-    "@huggingface/inference": "^2.8.0",
+
     "cors": "^2.8.5",
     "dotenv": "^16.4.0",
     "express": "^4.21.0",

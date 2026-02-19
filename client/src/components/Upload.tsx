@@ -17,9 +17,19 @@ export default function Upload({ onUploadComplete }: UploadProps) {
 
   const handleUpload = async (file: File) => {
     setSelectedFile(file);
-    setIsUploading(true);
     setError(null);
     setProgress(0);
+
+    // Client-side validation: accept any audio MIME type or common audio extensions
+    const validExtensions = ['.mp3', '.m4a', '.aac', '.wav', '.ogg', '.flac', '.webm'];
+    const hasAudioMime = file.type.startsWith('audio/');
+    const hasValidExtension = validExtensions.some((ext) => file.name.toLowerCase().endsWith(ext));
+    if (!hasAudioMime && !hasValidExtension) {
+      setError(`File type "${file.type || 'unknown'}" is not supported. Please upload an audio file.`);
+      return;
+    }
+
+    setIsUploading(true);
 
     try {
       const result = await uploadFile(file, setProgress);
@@ -58,10 +68,10 @@ export default function Upload({ onUploadComplete }: UploadProps) {
         <input
           ref={inputRef}
           type="file"
-          accept=".mp3,audio/mpeg"
+          accept=".mp3,.m4a,.aac,.wav,.ogg,.flac,.webm,audio/*"
           onChange={handleFileChange}
         />
-        <p>Drag & drop an MP3 file here, or click to browse</p>
+        <p>Drag & drop an audio file here, or click to browse</p>
         <button className="upload-btn" type="button" disabled={isUploading}>
           {isUploading ? 'Uploading...' : 'Choose File'}
         </button>
