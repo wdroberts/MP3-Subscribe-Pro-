@@ -22,9 +22,14 @@ export function errorHandler(
   }
 
   const statusCode = (err as { statusCode?: number }).statusCode || 500;
-  const response: ApiErrorResponse = { error: err.message || 'Internal server error' };
+  const isProduction = process.env.NODE_ENV === 'production';
+  const response: ApiErrorResponse = {
+    error: isProduction && statusCode >= 500
+      ? 'Internal server error'
+      : err.message || 'Internal server error',
+  };
 
-  if (process.env.NODE_ENV === 'development') {
+  if (!isProduction) {
     response.details = err.stack;
   }
 

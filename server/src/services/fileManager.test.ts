@@ -67,25 +67,36 @@ describe('fileManager', () => {
   describe('uploadExists', () => {
     it('returns true when file is accessible', async () => {
       mockedFs.access.mockResolvedValue(undefined);
-      const exists = await uploadExists('upload-id');
+      const exists = await uploadExists('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11');
       expect(exists).toBe(true);
     });
 
     it('returns false when file is not accessible', async () => {
       mockedFs.access.mockRejectedValue(new Error('ENOENT'));
-      const exists = await uploadExists('upload-id');
+      const exists = await uploadExists('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11');
       expect(exists).toBe(false);
+    });
+
+    it('returns false for invalid uploadId', async () => {
+      const exists = await uploadExists('../../etc');
+      expect(exists).toBe(false);
+      expect(mockedFs.access).not.toHaveBeenCalled();
     });
   });
 
   describe('cleanupUpload', () => {
     it('removes the upload directory', async () => {
       mockedFs.rm.mockResolvedValue(undefined);
-      await cleanupUpload('upload-id');
+      await cleanupUpload('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11');
       expect(mockedFs.rm).toHaveBeenCalledWith(
-        path.join(UPLOAD_DIR, 'upload-id'),
+        path.join(UPLOAD_DIR, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'),
         { recursive: true, force: true },
       );
+    });
+
+    it('throws for invalid uploadId', async () => {
+      await expect(cleanupUpload('../../etc')).rejects.toThrow('Invalid upload ID');
+      expect(mockedFs.rm).not.toHaveBeenCalled();
     });
   });
 

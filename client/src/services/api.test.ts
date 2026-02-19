@@ -170,7 +170,7 @@ describe('api service', () => {
       const uploadResult = {
         id: 'upload-1',
         filename: 'test.mp3',
-        filepath: '/tmp/test.mp3',
+
         mimeType: 'audio/mpeg',
         sizeBytes: 5,
         createdAt: '2025-01-01T00:00:00.000Z',
@@ -198,7 +198,7 @@ describe('api service', () => {
         mockXHR._triggerUpload('progress', { lengthComputable: true, loaded: 100, total: 100 });
         // Then complete
         mockXHR.status = 200;
-        mockXHR.responseText = JSON.stringify({ id: 'up-1', filename: 'test.mp3', filepath: '/tmp/test.mp3', mimeType: 'audio/mpeg', sizeBytes: 5, createdAt: '' });
+        mockXHR.responseText = JSON.stringify({ id: 'up-1', filename: 'test.mp3', mimeType: 'audio/mpeg', sizeBytes: 5, createdAt: '' });
         mockXHR._trigger('load');
       });
 
@@ -214,7 +214,7 @@ describe('api service', () => {
       mockXHR.send.mockImplementation(() => {
         mockXHR._triggerUpload('progress', { lengthComputable: false, loaded: 0, total: 0 });
         mockXHR.status = 200;
-        mockXHR.responseText = JSON.stringify({ id: 'up-1', filename: 'test.mp3', filepath: '/tmp/test.mp3', mimeType: 'audio/mpeg', sizeBytes: 5, createdAt: '' });
+        mockXHR.responseText = JSON.stringify({ id: 'up-1', filename: 'test.mp3', mimeType: 'audio/mpeg', sizeBytes: 5, createdAt: '' });
         mockXHR._trigger('load');
       });
 
@@ -262,7 +262,7 @@ describe('api service', () => {
 
       mockXHR.send.mockImplementation(() => {
         mockXHR.status = 200;
-        mockXHR.responseText = JSON.stringify({ id: 'up-1', filename: 'test.mp3', filepath: '/tmp/test.mp3', mimeType: 'audio/mpeg', sizeBytes: 5, createdAt: '' });
+        mockXHR.responseText = JSON.stringify({ id: 'up-1', filename: 'test.mp3', mimeType: 'audio/mpeg', sizeBytes: 5, createdAt: '' });
         mockXHR._trigger('load');
       });
 
@@ -275,7 +275,7 @@ describe('api service', () => {
 
       mockXHR.send.mockImplementation(() => {
         mockXHR.status = 200;
-        mockXHR.responseText = JSON.stringify({ id: 'up-1', filename: 'test.mp3', filepath: '/tmp/test.mp3', mimeType: 'audio/mpeg', sizeBytes: 5, createdAt: '' });
+        mockXHR.responseText = JSON.stringify({ id: 'up-1', filename: 'test.mp3', mimeType: 'audio/mpeg', sizeBytes: 5, createdAt: '' });
         mockXHR._trigger('load');
       });
 

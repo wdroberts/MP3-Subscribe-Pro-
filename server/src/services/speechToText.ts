@@ -430,8 +430,8 @@ export async function transcribe(
     console.log(`[STT-v4] Total words from all chunks: ${allWords.length} (${failedChunks} chunks failed)`);
     return groupWordsIntoSentences(allWords);
   } catch (err) {
-    console.error('[STT-v4] FAILED:', (err as Error).message);
-    return generateMockSegments(durationSeconds);
+    console.error('[STT-v4] Transcription failed:', (err as Error).message);
+    throw new Error(`Transcription failed: ${(err as Error).message}`);
   }
 }
 

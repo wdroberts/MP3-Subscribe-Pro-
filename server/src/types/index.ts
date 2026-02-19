@@ -1,7 +1,6 @@
 export interface UploadResult {
   id: string;
   filename: string;
-  filepath: string;
   mimeType: string;
   sizeBytes: number;
   createdAt: string;

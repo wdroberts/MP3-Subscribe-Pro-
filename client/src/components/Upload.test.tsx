@@ -38,7 +38,6 @@ describe('Upload', () => {
     const mockResult = {
       id: 'upload-1',
       filename: 'test.mp3',
-      filepath: '/tmp/test.mp3',
       mimeType: 'audio/mpeg',
       sizeBytes: 1024,
       createdAt: '2025-01-01T00:00:00.000Z',

@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { saveUpload } from '../services/fileManager';
+import { validateMp3 } from '../services/audioProcessor';
 
 const MAX_FILE_SIZE = (parseInt(process.env.MAX_FILE_SIZE_MB || '100', 10)) * 1024 * 1024;
 
@@ -44,6 +45,14 @@ uploadRouter.post(
     try {
       if (!req.file) {
         res.status(400).json({ error: 'No file uploaded' });
+        return;
+      }
+
+      const isValid = await validateMp3(req.file.path);
+      if (!isValid) {
+        const fs = await import('fs/promises');
+        await fs.unlink(req.file.path).catch(() => {});
+        res.status(400).json({ error: 'File does not contain a valid audio stream' });
         return;
       }
 
