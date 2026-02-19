@@ -8,7 +8,10 @@ import fsSync from 'fs';
 import path from 'path';
 import { TranscriptionSegment } from '../types';
 
-console.log('>>> speechToText.ts v4 loaded <<<');
+const isDevEnv = process.env.NODE_ENV !== 'production';
+function debugLog(...args: unknown[]): void {
+  if (isDevEnv) console.log(...args);
+}
 
 // ---------------------------------------------------------------------------
 // Google Speech client (lazy init)
@@ -30,7 +33,7 @@ function getSpeechClient(): InstanceType<typeof speech.SpeechClient> | null {
         },
         projectId: parsed.project_id,
       });
-      console.log('[STT-v4] Google Speech client initialized from inline GOOGLE_CREDENTIALS_JSON');
+      debugLog('[STT-v4] Google Speech client initialized from inline GOOGLE_CREDENTIALS_JSON');
       return _client;
     } catch (err) {
       console.warn('[STT-v4] Failed to parse GOOGLE_CREDENTIALS_JSON:', (err as Error).message);
@@ -44,10 +47,10 @@ function getSpeechClient(): InstanceType<typeof speech.SpeechClient> | null {
     const envPath = path.resolve(__dirname, '../../../.env');
     const envExists = fsSync.existsSync(envPath);
     console.warn(
-      `[STT-v4] GOOGLE_APPLICATION_CREDENTIALS is ${creds ? `"${creds}" (placeholder)` : 'not set'}.`,
+      `[STT-v4] GOOGLE_APPLICATION_CREDENTIALS is ${creds ? 'a placeholder value' : 'not set'}.`,
       envExists
         ? 'The .env file exists but may be missing this variable.'
-        : `No .env file found at ${envPath} — copy .env.example to .env and configure it.`,
+        : 'No .env file found — copy .env.example to .env and configure it.',
     );
     return null;
   }
@@ -58,10 +61,9 @@ function getSpeechClient(): InstanceType<typeof speech.SpeechClient> | null {
     fsSync.accessSync(resolved);
     process.env.GOOGLE_APPLICATION_CREDENTIALS = resolved;
     _client = new speech.SpeechClient();
-    console.log('[STT-v4] Google Speech client initialized from credentials file');
+    debugLog('[STT-v4] Google Speech client initialized from credentials file');
   } catch {
-    console.warn('[STT-v4] Credentials file not found at resolved path. GOOGLE_APPLICATION_CREDENTIALS:', creds);
-    console.warn('[STT-v4] Ensure the service account JSON file exists in the project root.');
+    console.warn('[STT-v4] Credentials file not found. Ensure the service account JSON file exists in the project root.');
   }
   return _client;
 }
@@ -157,7 +159,7 @@ async function recognizeBuffer(
   durationSec: number,
 ): Promise<WordInfo[]> {
   const b64Size = Math.ceil(buf.length * 4 / 3);
-  console.log(`[STT-v4] recognizeBuffer: ${(buf.length / 1e6).toFixed(2)}MB raw, ${(b64Size / 1e6).toFixed(2)}MB b64, enc=${encoding}, dur=${durationSec.toFixed(0)}s`);
+  debugLog(`[STT-v4] recognizeBuffer: ${(buf.length / 1e6).toFixed(2)}MB raw, ${(b64Size / 1e6).toFixed(2)}MB b64, enc=${encoding}, dur=${durationSec.toFixed(0)}s`);
 
   const audio = { content: buf.toString('base64') };
   const config = {
@@ -170,12 +172,12 @@ async function recognizeBuffer(
 
   let results;
   if (durationSec > 60) {
-    console.log('[STT-v4] Using longRunningRecognize (>60s)');
+    debugLog('[STT-v4] Using longRunningRecognize (>60s)');
     const [op] = await client.longRunningRecognize({ audio, config });
     const [resp] = await withTimeout(op.promise(), CHUNK_TIMEOUT_MS, 'longRunningRecognize');
     results = resp.results ?? [];
   } else {
-    console.log('[STT-v4] Using recognize (<=60s)');
+    debugLog('[STT-v4] Using recognize (<=60s)');
     const [resp] = await withTimeout(client.recognize({ audio, config }), CHUNK_TIMEOUT_MS, 'recognize');
     results = resp.results ?? [];
   }
@@ -192,7 +194,7 @@ async function recognizeBuffer(
       });
     }
   }
-  console.log(`[STT-v4] Got ${words.length} words from this chunk`);
+  debugLog(`[STT-v4] Got ${words.length} words from this chunk`);
   return words;
 }
 
@@ -256,7 +258,7 @@ export async function transcribe(
   originalMp3Path?: string,
   onProgress?: OnProgressCallback,
 ): Promise<TranscriptionSegment[]> {
-  console.log(`[STT-v4] transcribe() called. wav=${audioFilePath}, mp3=${originalMp3Path ?? 'none'}, dur=${durationSeconds}s`);
+  debugLog(`[STT-v4] transcribe() called. dur=${durationSeconds}s`);
 
   const CHUNK_SECONDS = 180;
 
@@ -295,11 +297,11 @@ export async function transcribe(
     const mp3Size = (await fs.stat(mp3Path)).size;
     const wavSize = await fs.stat(audioFilePath).then((s) => s.size).catch(() => 0);
 
-    console.log(`[STT-v4] MP3=${(mp3Size / 1e6).toFixed(2)}MB, WAV=${(wavSize / 1e6).toFixed(2)}MB, limit=${(MAX_RAW_BYTES / 1e6).toFixed(1)}MB`);
+    debugLog(`[STT-v4] MP3=${(mp3Size / 1e6).toFixed(2)}MB, WAV=${(wavSize / 1e6).toFixed(2)}MB, limit=${(MAX_RAW_BYTES / 1e6).toFixed(1)}MB`);
 
     // --- Path A: MP3 fits inline ---
     if (mp3Size <= MAX_RAW_BYTES) {
-      console.log('[STT-v4] >>> Path A: MP3 inline');
+      debugLog('[STT-v4] >>> Path A: MP3 inline');
       onProgress?.({ percent: 20, currentStep: 'Transcribing audio...', chunksTotal: 1, chunksCompleted: 0 });
       const buf = await fs.readFile(mp3Path);
       const words = await recognizeBuffer(client, buf, 'MP3', sampleRateHertz, durationSeconds);
@@ -309,7 +311,7 @@ export async function transcribe(
 
     // --- Path B: WAV fits inline ---
     if (wavSize > 0 && wavSize <= MAX_RAW_BYTES) {
-      console.log('[STT-v4] >>> Path B: WAV inline');
+      debugLog('[STT-v4] >>> Path B: WAV inline');
       onProgress?.({ percent: 20, currentStep: 'Transcribing audio...', chunksTotal: 1, chunksCompleted: 0 });
       const buf = await fs.readFile(audioFilePath);
       const words = await recognizeBuffer(client, buf, 'LINEAR16', sampleRateHertz, durationSeconds);
@@ -318,7 +320,7 @@ export async function transcribe(
     }
 
     // --- Path C: chunk the MP3 into 3-minute pieces ---
-    console.log('[STT-v4] >>> Path C: chunking MP3 into 3-minute pieces');
+    debugLog('[STT-v4] >>> Path C: chunking MP3 into 3-minute pieces');
     const estimatedChunks = Math.ceil(durationSeconds / CHUNK_SECONDS);
     onProgress?.({ percent: 2, currentStep: 'Splitting audio into chunks...', chunksTotal: estimatedChunks, chunksCompleted: 0 });
     const chunkDir = path.join(path.dirname(mp3Path), 'stt_chunks');
@@ -331,7 +333,7 @@ export async function transcribe(
         chunksCompleted: 0,
       });
     });
-    console.log(`[STT-v4] Created ${chunks.length} chunks`);
+    debugLog(`[STT-v4] Created ${chunks.length} chunks`);
 
     // Process chunks through a concurrent pool — always keep MAX_CONCURRENT
     // in flight so there are no idle slots between completions.
@@ -344,7 +346,7 @@ export async function transcribe(
     function reportChunkProgress(): void {
       const processed = completedChunks + failedChunks;
       const chunkPercent = 10 + Math.round((processed / chunks.length) * 85);
-      console.log(`[STT-v4] Progress: ${chunkPercent}% — ${completedChunks} done, ${failedChunks} failed, ${chunks.length - processed} remaining`);
+      debugLog(`[STT-v4] Progress: ${chunkPercent}% — ${completedChunks} done, ${failedChunks} failed, ${chunks.length - processed} remaining`);
       onProgress?.({
         percent: chunkPercent,
         currentStep: failedChunks > 0
@@ -427,7 +429,7 @@ export async function transcribe(
     // Cleanup
     await fs.rm(chunkDir, { recursive: true, force: true }).catch(() => {});
 
-    console.log(`[STT-v4] Total words from all chunks: ${allWords.length} (${failedChunks} chunks failed)`);
+    debugLog(`[STT-v4] Total words from all chunks: ${allWords.length} (${failedChunks} chunks failed)`);
     return groupWordsIntoSentences(allWords);
   } catch (err) {
     console.error('[STT-v4] Transcription failed:', (err as Error).message);
