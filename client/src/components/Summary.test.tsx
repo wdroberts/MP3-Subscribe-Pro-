@@ -55,9 +55,20 @@ describe('Summary', () => {
   });
 
   it('displays summary text when available', () => {
-    mockHookReturn.summary = { summary: '**Key Points:**\n\n- First point.' };
+    mockHookReturn.summary = { summary: '**Key Points:**\n\n- First point.\n- Second point.' };
     render(<Summary transcriptionId="job-1" />);
-    expect(screen.getByText(/First point/)).toBeInTheDocument();
+    expect(screen.getByText('Key Points:')).toBeInTheDocument();
+    expect(screen.getByText('First point.')).toBeInTheDocument();
+    expect(screen.getByText('Second point.')).toBeInTheDocument();
+  });
+
+  it('renders bullet points as list items', () => {
+    mockHookReturn.summary = { summary: '**Key Points:**\n\n- Item one.\n- Item two.' };
+    const { container } = render(<Summary transcriptionId="job-1" />);
+    const listItems = container.querySelectorAll('li');
+    expect(listItems).toHaveLength(2);
+    expect(listItems[0].textContent).toBe('Item one.');
+    expect(listItems[1].textContent).toBe('Item two.');
   });
 
   it('hides Extract Key Points button when summary is available', () => {
