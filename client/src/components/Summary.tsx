@@ -30,7 +30,7 @@ function renderMarkdown(text: string) {
       continue;
     }
 
-    if (trimmed.startsWith('- ')) {
+    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
       listItems.push(trimmed.slice(2));
       continue;
     }
