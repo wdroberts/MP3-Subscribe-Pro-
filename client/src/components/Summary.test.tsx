@@ -26,26 +26,26 @@ describe('Summary', () => {
     };
   });
 
-  it('renders the Summary heading', () => {
+  it('renders the Analysis heading', () => {
     render(<Summary transcriptionId="job-1" />);
-    expect(screen.getByText('Summary')).toBeInTheDocument();
+    expect(screen.getByText('Analysis')).toBeInTheDocument();
   });
 
-  it('renders Generate Summary button when no summary', () => {
+  it('renders Extract Key Points button when no summary', () => {
     render(<Summary transcriptionId="job-1" />);
-    expect(screen.getByRole('button', { name: 'Generate Summary' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Extract Key Points' })).toBeInTheDocument();
   });
 
   it('calls summarize when button is clicked', async () => {
     render(<Summary transcriptionId="job-1" />);
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Summary' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Extract Key Points' }));
     expect(mockSummarize).toHaveBeenCalledWith('job-1');
   });
 
   it('shows loading state', () => {
     mockHookReturn.isLoading = true;
     render(<Summary transcriptionId="job-1" />);
-    expect(screen.getByText('Generating summary...')).toBeInTheDocument();
+    expect(screen.getByText('Extracting key points...')).toBeInTheDocument();
   });
 
   it('shows error message', () => {
@@ -55,14 +55,14 @@ describe('Summary', () => {
   });
 
   it('displays summary text when available', () => {
-    mockHookReturn.summary = { summary: 'This is a summary of the transcription.' };
+    mockHookReturn.summary = { summary: '**Key Points:**\n\n- First point.' };
     render(<Summary transcriptionId="job-1" />);
-    expect(screen.getByText('This is a summary of the transcription.')).toBeInTheDocument();
+    expect(screen.getByText(/First point/)).toBeInTheDocument();
   });
 
-  it('hides Generate Summary button when summary is available', () => {
-    mockHookReturn.summary = { summary: 'A summary.' };
+  it('hides Extract Key Points button when summary is available', () => {
+    mockHookReturn.summary = { summary: 'Analysis result.' };
     render(<Summary transcriptionId="job-1" />);
-    expect(screen.queryByRole('button', { name: 'Generate Summary' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Extract Key Points' })).not.toBeInTheDocument();
   });
 });

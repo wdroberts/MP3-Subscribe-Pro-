@@ -8,10 +8,10 @@ process.env.OPENAI_API_KEY = 'sk-test_key_for_testing';
 
 import { summarize } from './summarizer';
 
-function mockFetchResponse(summaryText: string) {
+function mockFetchResponse(text: string) {
   return {
     ok: true,
-    json: async () => ({ choices: [{ message: { content: summaryText } }] }),
+    json: async () => ({ choices: [{ message: { content: text } }] }),
   };
 }
 
@@ -20,49 +20,53 @@ describe('summarize', () => {
     jest.clearAllMocks();
   });
 
-  it('summarizes short text in a single chunk', async () => {
-    mockFetch.mockResolvedValue(mockFetchResponse('Short summary.'));
+  it('sends the full transcript to OpenAI in a single call', async () => {
+    mockFetch.mockResolvedValue(mockFetchResponse('**Key Points:**\n\n- Point one.'));
 
-    const result = await summarize('A short text to summarize.');
-    expect(result).toBe('Short summary.');
+    const result = await summarize('A transcript to analyze.');
+    expect(result).toBe('**Key Points:**\n\n- Point one.');
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining('api.openai.com'),
       expect.objectContaining({
         method: 'POST',
-        body: expect.stringContaining('A short text to summarize.'),
+        body: expect.stringContaining('A transcript to analyze.'),
       }),
     );
   });
 
-  it('summarizes long text by chunking and combining', async () => {
-    mockFetch.mockResolvedValue(mockFetchResponse('Chunk summary.'));
+  it('uses the extraction system prompt', async () => {
+    mockFetch.mockResolvedValue(mockFetchResponse('result'));
 
-    const longText = 'Word. '.repeat(1000); // Well over 3500 chars
-    const result = await summarize(longText);
-
-    // Should be called multiple times (once per chunk)
-    expect(mockFetch.mock.calls.length).toBeGreaterThan(1);
-    expect(result).toContain('Chunk summary.');
+    await summarize('Some text.');
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.messages[0].content).toContain('Key Points');
+    expect(body.messages[0].content).toContain('Action Items');
+    expect(body.messages[0].content).toContain('People Mentioned');
   });
 
-  it('does a final summarization pass when combined summaries are too long', async () => {
-    let chunkCount = 0;
-    mockFetch.mockImplementation(async (_url: string, options: { body: string }) => {
-      chunkCount++;
-      const parsed = JSON.parse(options.body);
-      // If the user message looks like combined A-summaries, it's the final pass
-      const userMessage = parsed.messages[1].content as string;
-      if (userMessage.includes('A'.repeat(100))) {
-        return mockFetchResponse('Final combined summary.');
-      }
-      return mockFetchResponse('A'.repeat(500));
-    });
+  it('sends transcript as the user message without a prefix', async () => {
+    mockFetch.mockResolvedValue(mockFetchResponse('result'));
 
-    // Generate text long enough to produce 8+ chunks (>28000 chars)
-    const longText = 'Sentence here. '.repeat(2000);
-    const result = await summarize(longText);
-    expect(chunkCount).toBeGreaterThan(8); // Enough chunks to trigger final pass
-    expect(result).toBe('Final combined summary.');
+    await summarize('The actual transcript content.');
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.messages[1].content).toBe('The actual transcript content.');
+  });
+
+  it('falls back to extractive output when OpenAI fails', async () => {
+    mockFetch.mockRejectedValue(new Error('Network error'));
+
+    const result = await summarize('This is a sentence that is long enough. Another long sentence here. A third one for good measure. Fourth sentence in the text. Fifth sentence to have enough.');
+    expect(result).toContain('**Key Points:**');
+    expect(result).toContain('**Action Items:**');
+    expect(result).toContain('**People Mentioned:**');
+  });
+
+  it('requests 1024 max tokens', async () => {
+    mockFetch.mockResolvedValue(mockFetchResponse('result'));
+
+    await summarize('Text.');
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.max_tokens).toBe(1024);
   });
 });

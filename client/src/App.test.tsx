@@ -83,7 +83,7 @@ describe('App', () => {
       expect(screen.getByText(/Transcribing audio/i)).toBeInTheDocument();
     });
 
-    it('shows Summary and Export when transcription is completed', async () => {
+    it('shows Analysis and Export when transcription is completed', async () => {
       mockTranscriptionReturn.status = 'completed';
       mockTranscriptionReturn.transcription = {
         id: 'job-1',
@@ -100,11 +100,11 @@ describe('App', () => {
         capturedOnUploadComplete!({ id: 'upload-1', filename: 'test.mp3', size: 1024, duration: 60 });
       });
 
-      expect(screen.getByText('Summary')).toBeInTheDocument();
+      expect(screen.getByText('Analysis')).toBeInTheDocument();
       expect(screen.getByText('Export')).toBeInTheDocument();
     });
 
-    it('does not show Summary and Export when transcription is not completed', async () => {
+    it('does not show Analysis and Export when transcription is not completed', async () => {
       mockTranscriptionReturn.status = 'processing';
       mockTranscriptionReturn.transcription = null;
 
@@ -114,7 +114,7 @@ describe('App', () => {
         capturedOnUploadComplete!({ id: 'upload-1', filename: 'test.mp3', size: 1024, duration: 60 });
       });
 
-      expect(screen.queryByText('Summary')).not.toBeInTheDocument();
+      expect(screen.queryByText('Analysis')).not.toBeInTheDocument();
       expect(screen.queryByText('Export')).not.toBeInTheDocument();
     });
 

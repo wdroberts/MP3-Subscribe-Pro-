@@ -13,18 +13,18 @@ export default function Summary({ transcriptionId }: SummaryProps) {
 
   return (
     <div className="summary-section">
-      <h2>Summary</h2>
+      <h2>Analysis</h2>
 
       {!summary && !isLoading && (
         <button className="upload-btn" onClick={handleSummarize} disabled={isLoading}>
-          Generate Summary
+          Extract Key Points
         </button>
       )}
 
       {isLoading && (
         <div className="loading-indicator">
           <div className="spinner" />
-          <p>Generating summary...</p>
+          <p>Extracting key points...</p>
         </div>
       )}
 
