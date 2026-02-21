@@ -243,7 +243,7 @@ describe('api service', () => {
         mockXHR._trigger('load');
       });
 
-      await expect(uploadFile(file, vi.fn())).rejects.toThrow('Upload failed');
+      await expect(uploadFile(file, vi.fn())).rejects.toThrow('Upload failed (HTTP 500)');
     });
 
     it('rejects with network error on XHR error event', async () => {

@@ -21,10 +21,7 @@ app.use(express.json({ limit: '1mb' }));
 app.use(createRateLimiter());
 
 app.get('/api/health', (_req, res) => {
-  res.json({
-    status: 'ok',
-    maxFileSizeMB: process.env.MAX_FILE_SIZE_MB || '(not set, default 500)',
-  });
+  res.json({ status: 'ok' });
 });
 
 app.use('/api/upload', uploadRouter);
