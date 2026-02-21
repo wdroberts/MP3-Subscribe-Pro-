@@ -1,10 +1,10 @@
 # MP3 Transcribe Pro
 
 A web application that converts MP3 audio files into timestamped text
-transcriptions with AI-powered summarization.
+transcriptions with AI-powered analysis.
 
-Upload an MP3 file, get a full transcription with clickable timestamps, generate
-a summary, and export the results.
+Upload an MP3 file, get a full transcription with clickable timestamps, extract
+key points, action items, and people mentioned, and export the results.
 
 ## Features
 
@@ -12,7 +12,7 @@ a summary, and export the results.
 - **Speech-to-Text** transcription powered by Google Cloud
 - **Clickable Timestamps** on every sentence
 - **Live Progress** showing "X of Y chunks completed" during transcription
-- **AI Summarization** using OpenAI GPT
+- **AI Analysis** extracts key points, action items, and people mentioned using OpenAI
 - **Export** as `.txt`, `.srt` (subtitles), or copy to clipboard
 
 ## Quick Start
@@ -67,7 +67,7 @@ Open the `.env` file in a text editor and add your keys:
 GOOGLE_APPLICATION_CREDENTIALS=path/to/your-service-account-key.json
 GOOGLE_PROJECT_ID=your-google-project-id
 
-# OpenAI (for the summarization feature)
+# OpenAI (for the analysis feature)
 # Get a key from: https://platform.openai.com/api-keys
 OPENAI_API_KEY=sk-your-key-here
 
@@ -97,7 +97,7 @@ This starts both servers:
 2. Click "Upload" and select an MP3 file
 3. Wait for the transcription (you'll see "X of Y chunks completed")
 4. Read the timestamped transcription
-5. Click "Summarize" to generate an AI summary
+5. Click "Analyze" to extract key points, action items, and people mentioned
 6. Click "Export" to download as `.txt` or `.srt`
 
 ## Project Structure
