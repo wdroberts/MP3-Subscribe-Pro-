@@ -1,8 +1,7 @@
-import path from 'path';
+import './env';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
 import { uploadRouter } from './routes/upload';
 import { transcribeRouter } from './routes/transcribe';
 import { summarizeRouter } from './routes/summarize';
@@ -10,15 +9,6 @@ import { exportRouter } from './routes/export';
 import { errorHandler } from './middleware/errorHandler';
 import { createRateLimiter } from './middleware/rateLimiter';
 import { ensureUploadDir, cleanupStaleUploads } from './services/fileManager';
-
-const envPath = path.resolve(__dirname, '../../.env');
-const envResult = dotenv.config({ path: envPath });
-if (envResult.error) {
-  console.warn(`⚠ Could not load .env from ${envPath}`);
-  console.warn('  Copy .env.example to .env and configure your credentials.');
-} else {
-  console.log(`[env] Loaded .env from ${envPath}`);
-}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
