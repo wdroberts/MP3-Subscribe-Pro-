@@ -29,8 +29,12 @@ export async function uploadFile(
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve(JSON.parse(xhr.responseText));
       } else {
-        const body = JSON.parse(xhr.responseText);
-        reject(new Error(body.error || 'Upload failed'));
+        try {
+          const body = JSON.parse(xhr.responseText);
+          reject(new Error(body.error || `Upload failed (HTTP ${xhr.status})`));
+        } catch {
+          reject(new Error(`Upload failed (HTTP ${xhr.status}): ${xhr.responseText.substring(0, 200)}`));
+        }
       }
     });
 
