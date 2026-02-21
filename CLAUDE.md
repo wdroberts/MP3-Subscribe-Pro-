@@ -7,8 +7,9 @@ useful reference for any developer working on the codebase.
 
 MP3 Transcribe Pro is a web app that turns MP3 audio files into text. You upload
 an MP3, the app sends it to Google's Speech-to-Text service, and you get back a
-timestamped transcription. You can also generate a summary of the text using
-OpenAI, and export everything as `.txt`, `.srt`, or copy to clipboard.
+timestamped transcription. You can then extract key points, action items, and
+people mentioned using OpenAI, and export everything as `.txt`, `.srt`, or copy
+to clipboard.
 
 **Repository:** https://github.com/wdroberts/MP3-Subscribe-Pro-.git
 
