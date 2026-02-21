@@ -3,7 +3,9 @@ import multer from 'multer';
 import { saveUpload } from '../services/fileManager';
 import { validateMp3 } from '../services/audioProcessor';
 
-const MAX_FILE_SIZE = (parseInt(process.env.MAX_FILE_SIZE_MB || '100', 10)) * 1024 * 1024;
+const MAX_FILE_SIZE_MB = parseInt(process.env.MAX_FILE_SIZE_MB || '500', 10);
+const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
+console.log(`[upload] MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB}, limit=${MAX_FILE_SIZE} bytes`);
 
 const ALLOWED_AUDIO_MIMES = new Set([
   'audio/mpeg',
@@ -26,7 +28,7 @@ const ALLOWED_AUDIO_MIMES = new Set([
 
 const upload = multer({
   dest: process.env.UPLOAD_DIR || './tmp/uploads',
-  limits: { fileSize: MAX_FILE_SIZE },
+  limits: { fileSize: Infinity },
   fileFilter: (_req, file, cb) => {
     if (ALLOWED_AUDIO_MIMES.has(file.mimetype)) {
       cb(null, true);
@@ -40,6 +42,10 @@ export const uploadRouter = Router();
 
 uploadRouter.post(
   '/',
+  (req: Request, _res: Response, next: NextFunction) => {
+    console.log(`[upload] Incoming request: Content-Length=${req.headers['content-length']}, Content-Type=${req.headers['content-type']?.substring(0, 50)}`);
+    next();
+  },
   upload.single('file'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {

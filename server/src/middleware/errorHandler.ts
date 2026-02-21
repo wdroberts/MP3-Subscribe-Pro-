@@ -14,6 +14,7 @@ export function errorHandler(
 
   if (err instanceof MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
+      console.error(`[upload] LIMIT_FILE_SIZE hit. MAX_FILE_SIZE_MB=${process.env.MAX_FILE_SIZE_MB}. Content-Length=${_req.headers['content-length']}`);
       res.status(400).json({ error: 'File too large', details: err.message });
       return;
     }
