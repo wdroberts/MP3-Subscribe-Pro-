@@ -3,8 +3,6 @@ import multer from 'multer';
 import { saveUpload } from '../services/fileManager';
 import { validateMp3 } from '../services/audioProcessor';
 
-const MAX_FILE_SIZE = (parseInt(process.env.MAX_FILE_SIZE_MB || '100', 10)) * 1024 * 1024;
-
 const ALLOWED_AUDIO_MIMES = new Set([
   'audio/mpeg',
   'audio/mp3',
@@ -24,23 +22,34 @@ const ALLOWED_AUDIO_MIMES = new Set([
   'audio/webm',
 ]);
 
-const upload = multer({
-  dest: process.env.UPLOAD_DIR || './tmp/uploads',
-  limits: { fileSize: MAX_FILE_SIZE },
-  fileFilter: (_req, file, cb) => {
-    if (ALLOWED_AUDIO_MIMES.has(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error(`Only audio files are allowed (received ${file.mimetype})`));
-    }
-  },
-});
+function createUpload() {
+  const maxFileSize = (parseInt(process.env.MAX_FILE_SIZE_MB || '100', 10)) * 1024 * 1024;
+  return multer({
+    dest: process.env.UPLOAD_DIR || './tmp/uploads',
+    limits: { fileSize: maxFileSize },
+    fileFilter: (_req, file, cb) => {
+      if (ALLOWED_AUDIO_MIMES.has(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error(`Only audio files are allowed (received ${file.mimetype})`));
+      }
+    },
+  });
+}
+
+let upload: multer.Multer;
+function getUpload() {
+  if (!upload) {
+    upload = createUpload();
+  }
+  return upload;
+}
 
 export const uploadRouter = Router();
 
 uploadRouter.post(
   '/',
-  upload.single('file'),
+  (req, res, next) => getUpload().single('file')(req, res, next),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.file) {
