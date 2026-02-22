@@ -1,7 +1,7 @@
 import { UploadResult, TranscriptionResult, SummarizationResult } from '../types/index.ts';
 
 const TOKEN_KEY = 'mp3_auth_token';
-const CHUNK_SIZE = 1 * 1024 * 1024; // 1 MB per chunk — sent as base64 JSON to avoid proxy multipart detection
+const CHUNK_SIZE = 512 * 1024; // 512 KB per chunk — base64 ≈ 700KB JSON body, stays under proxy limits
 
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem(TOKEN_KEY);
@@ -12,13 +12,25 @@ function getAuthHeaders(): Record<string, string> {
 }
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    ...init,
-    headers: { ...getAuthHeaders(), ...init?.headers },
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      headers: { ...getAuthHeaders(), ...init?.headers },
+    });
+  } catch (networkErr) {
+    throw new Error(`[${url}] Network error: ${networkErr}`);
+  }
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-    throw new Error(body.error || `Request failed (HTTP ${res.status})`);
+    const text = await res.text().catch(() => '');
+    let errorMsg: string;
+    try {
+      const body = JSON.parse(text);
+      errorMsg = body.error || `HTTP ${res.status}`;
+    } catch {
+      errorMsg = text ? `HTTP ${res.status}: ${text.substring(0, 200)}` : `HTTP ${res.status}`;
+    }
+    throw new Error(`[${url}] ${errorMsg}`);
   }
   return res.json();
 }

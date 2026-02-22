@@ -37,22 +37,26 @@ app.use(errorHandler);
 
 // Serve the production-built client
 const clientDist = path.resolve(__dirname, '../../client/dist');
-// Static assets (JS/CSS) have hashed names — safe to cache
-// HTML must never be cached so the browser always gets the latest JS references
 app.use(express.static(clientDist, {
+  index: false, // Don't auto-serve index.html — we handle it with cache-busting redirect below
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.html')) {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
     }
   },
 }));
+// Cache-bust: redirect bare / to /?_v=<timestamp> so CDN/proxy treats it as a new URL
+app.get('/', (req, res) => {
+  if (!req.query._v) {
+    res.redirect(302, `/?_v=${Date.now()}`);
+    return;
+  }
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.sendFile(path.join(clientDist, 'index.html'));
+});
 // SPA fallback: serve index.html for any non-API route
 app.get('*', (_req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
   res.sendFile(path.join(clientDist, 'index.html'));
 });
 
