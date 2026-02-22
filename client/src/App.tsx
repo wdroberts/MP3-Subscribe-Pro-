@@ -22,8 +22,8 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>MP3 Transcribe Pro</h1>
-        <p>Upload an MP3 file to transcribe, summarize, and export. <span style={{fontSize: '0.7em', opacity: 0.5}}>v5</span></p>
+        <h1>MP3 Transcribe Pro (v6-chunked)</h1>
+        <p>Upload an audio file to transcribe, summarize, and export.</p>
       </header>
 
       <main className="app-main">
