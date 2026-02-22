@@ -35,47 +35,6 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
-// ── Single-request upload (files ≤ CHUNK_SIZE) ──────────────────────
-function uploadSmallFile(
-  file: File,
-  onProgress: (percent: number) => void,
-): Promise<UploadResult> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    const formData = new FormData();
-    formData.append('file', file);
-
-    xhr.upload.addEventListener('progress', (e) => {
-      if (e.lengthComputable) {
-        onProgress(Math.round((e.loaded / e.total) * 100));
-      }
-    });
-
-    xhr.addEventListener('load', () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(JSON.parse(xhr.responseText));
-      } else {
-        try {
-          const body = JSON.parse(xhr.responseText);
-          reject(new Error(body.error || `Upload failed (HTTP ${xhr.status})`));
-        } catch {
-          reject(new Error(`Upload failed (HTTP ${xhr.status}): ${xhr.responseText.substring(0, 200)}`));
-        }
-      }
-    });
-
-    xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
-    xhr.open('POST', '/api/upload');
-
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (token) {
-      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-    }
-
-    xhr.send(formData);
-  });
-}
-
 // ── Read a Blob as base64 (avoids multipart/form-data entirely) ─────
 function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {

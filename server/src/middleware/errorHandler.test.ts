@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-import { MulterError } from 'multer';
 import { errorHandler } from './errorHandler';
 
 function createMockRes() {
@@ -21,26 +20,6 @@ afterEach(() => {
 });
 
 describe('errorHandler', () => {
-  it('handles MulterError LIMIT_FILE_SIZE with 400', () => {
-    const err = new MulterError('LIMIT_FILE_SIZE');
-    const res = createMockRes();
-    errorHandler(err, mockReq, res, mockNext);
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ error: 'File too large' }),
-    );
-  });
-
-  it('handles other MulterError with 400', () => {
-    const err = new MulterError('LIMIT_UNEXPECTED_FILE');
-    const res = createMockRes();
-    errorHandler(err, mockReq, res, mockNext);
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ error: 'Upload error' }),
-    );
-  });
-
   it('handles generic error with 500', () => {
     const err = new Error('Something broke');
     const res = createMockRes();

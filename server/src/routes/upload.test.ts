@@ -1,101 +1,70 @@
 import express from 'express';
 import request from 'supertest';
-import { uploadRouter } from './upload';
-import * as fileManager from '../services/fileManager';
+import { transferRouter } from './upload';
 import * as audioProcessor from '../services/audioProcessor';
+import * as fileManager from '../services/fileManager';
 
-jest.mock('../services/fileManager');
 jest.mock('../services/audioProcessor');
+jest.mock('../services/fileManager');
 
-const mockedSaveUpload = jest.mocked(fileManager.saveUpload);
 const mockedValidateMp3 = jest.mocked(audioProcessor.validateMp3);
+const mockedGetUploadDir = jest.mocked(fileManager.getUploadDir);
 
 const app = express();
-app.use('/api/upload', uploadRouter);
+app.use(express.json({ limit: '1mb' }));
+app.use('/api/transfer', transferRouter);
 
-describe('upload routes', () => {
+describe('transfer routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockedGetUploadDir.mockReturnValue('/tmp/test-uploads');
   });
 
-  it('returns 400 when no file is uploaded', async () => {
-    const res = await request(app).post('/api/upload');
+  it('returns 400 when begin is missing fields', async () => {
+    const res = await request(app)
+      .post('/api/transfer/begin')
+      .send({});
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('No file uploaded');
+    expect(res.body.error).toContain('Missing required fields');
   });
 
-  it('returns 201 with upload result on valid MP3 upload', async () => {
-    const mockResult = {
-      id: 'upload-123',
-      filename: 'test.mp3',
-      mimeType: 'audio/mpeg',
-      sizeBytes: 100,
-      createdAt: '2025-01-01T00:00:00.000Z',
-    };
-    mockedValidateMp3.mockResolvedValue(true);
-    mockedSaveUpload.mockResolvedValue(mockResult);
-
+  it('returns uploadId on valid begin request', async () => {
     const res = await request(app)
-      .post('/api/upload')
-      .attach('file', Buffer.alloc(100, 0xff), {
-        filename: 'test.mp3',
-        contentType: 'audio/mpeg',
-      });
-
-    expect(res.status).toBe(201);
-    expect(res.body.id).toBe('upload-123');
-    expect(res.body.filename).toBe('test.mp3');
-    expect(mockedValidateMp3).toHaveBeenCalled();
-    expect(mockedSaveUpload).toHaveBeenCalled();
+      .post('/api/transfer/begin')
+      .send({ filename: 'test.mp3', totalChunks: 1, mimeType: 'audio/mpeg' });
+    expect(res.status).toBe(200);
+    expect(res.body.uploadId).toBeDefined();
   });
 
-  it('rejects non-audio MIME types via multer fileFilter', async () => {
+  it('returns 400 when part is missing fields', async () => {
     const res = await request(app)
-      .post('/api/upload')
-      .attach('file', Buffer.alloc(100, 0xff), {
-        filename: 'test.txt',
-        contentType: 'text/plain',
-      });
-
-    // Multer rejects before handler — saveUpload should not be called
-    expect(mockedSaveUpload).not.toHaveBeenCalled();
-    expect(res.status).toBeGreaterThanOrEqual(400);
-  });
-
-  it('accepts audio/mp3 MIME type', async () => {
-    const mockResult = {
-      id: 'upload-789',
-      filename: 'test.mp3',
-      mimeType: 'audio/mp3',
-      sizeBytes: 100,
-      createdAt: '2025-01-01T00:00:00.000Z',
-    };
-    mockedValidateMp3.mockResolvedValue(true);
-    mockedSaveUpload.mockResolvedValue(mockResult);
-
-    const res = await request(app)
-      .post('/api/upload')
-      .attach('file', Buffer.alloc(100, 0xff), {
-        filename: 'test.mp3',
-        contentType: 'audio/mp3',
-      });
-
-    expect(res.status).toBe(201);
-    expect(mockedSaveUpload).toHaveBeenCalled();
-  });
-
-  it('returns 400 when file fails audio validation', async () => {
-    mockedValidateMp3.mockResolvedValue(false);
-
-    const res = await request(app)
-      .post('/api/upload')
-      .attach('file', Buffer.alloc(100, 0xff), {
-        filename: 'test.mp3',
-        contentType: 'audio/mpeg',
-      });
-
+      .post('/api/transfer/part')
+      .send({});
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('File does not contain a valid audio stream');
-    expect(mockedSaveUpload).not.toHaveBeenCalled();
+    expect(res.body.error).toContain('Missing uploadId');
+  });
+
+  it('returns 404 when part references unknown session', async () => {
+    const res = await request(app)
+      .post('/api/transfer/part')
+      .send({ uploadId: 'nonexistent', chunkIndex: 0, data: 'AAAA' });
+    expect(res.status).toBe(404);
+    expect(res.body.error).toContain('Transfer session not found');
+  });
+
+  it('returns 400 when done is missing uploadId', async () => {
+    const res = await request(app)
+      .post('/api/transfer/done')
+      .send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('Missing uploadId');
+  });
+
+  it('returns 404 when done references unknown session', async () => {
+    const res = await request(app)
+      .post('/api/transfer/done')
+      .send({ uploadId: 'nonexistent' });
+    expect(res.status).toBe(404);
+    expect(res.body.error).toContain('Transfer session not found');
   });
 });
