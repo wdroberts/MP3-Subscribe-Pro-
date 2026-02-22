@@ -19,7 +19,7 @@ function spaRedirect(): Plugin {
 export default defineConfig({
   plugins: [react(), spaRedirect()],
   server: {
-    open: '/',
+    open: '/api/spa',
     headers: {
       'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
       'Pragma': 'no-cache',
