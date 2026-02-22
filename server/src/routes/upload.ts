@@ -119,7 +119,11 @@ processRouter.post(
       for (let i = 0; i < state.totalParts; i++) {
         const chunkPath = path.join(state.dir, `p-${String(i).padStart(5, '0')}`);
         const chunkData = await fs.readFile(chunkPath);
-        writeStream.write(chunkData);
+        if (!writeStream.write(chunkData)) {
+          // Wait for the stream to drain before reading the next chunk,
+          // otherwise all chunks accumulate in memory (OOM for large files).
+          await new Promise<void>((resolve) => writeStream.once('drain', resolve));
+        }
       }
       await new Promise<void>((resolve, reject) => {
         writeStream.end(() => resolve());

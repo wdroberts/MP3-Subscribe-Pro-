@@ -1,70 +1,69 @@
 import express from 'express';
 import request from 'supertest';
-import { transferRouter } from './upload';
+import { processRouter } from './upload';
 import * as audioProcessor from '../services/audioProcessor';
 import * as fileManager from '../services/fileManager';
 
 jest.mock('../services/audioProcessor');
 jest.mock('../services/fileManager');
 
-const mockedValidateMp3 = jest.mocked(audioProcessor.validateMp3);
 const mockedGetUploadDir = jest.mocked(fileManager.getUploadDir);
 
 const app = express();
-app.use(express.json({ limit: '1mb' }));
-app.use('/api/transfer', transferRouter);
+app.use(express.json({ limit: '2mb' }));
+app.use('/api/process', processRouter);
 
-describe('transfer routes', () => {
+describe('process routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedGetUploadDir.mockReturnValue('/tmp/test-uploads');
   });
 
-  it('returns 400 when begin is missing fields', async () => {
+  it('returns 400 when init is missing fields', async () => {
     const res = await request(app)
-      .post('/api/transfer/begin')
+      .post('/api/process/init')
       .send({});
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('Missing required fields');
   });
 
-  it('returns uploadId on valid begin request', async () => {
+  it('returns sessionId on valid init request', async () => {
     const res = await request(app)
-      .post('/api/transfer/begin')
-      .send({ filename: 'test.mp3', totalChunks: 1, mimeType: 'audio/mpeg' });
+      .post('/api/process/init')
+      .send({ name: 'test.mp3', parts: 1, kind: 'audio/mpeg' });
     expect(res.status).toBe(200);
-    expect(res.body.uploadId).toBeDefined();
+    expect(res.body.sessionId).toBeDefined();
   });
 
-  it('returns 400 when part is missing fields', async () => {
+  it('returns 400 when chunk is missing fields', async () => {
     const res = await request(app)
-      .post('/api/transfer/part')
+      .post('/api/process/chunk')
       .send({});
     expect(res.status).toBe(400);
-    expect(res.body.error).toContain('Missing uploadId');
+    expect(res.body.error).toContain('Missing sessionId');
   });
 
-  it('returns 404 when part references unknown session', async () => {
+  it('returns 404 when chunk references unknown session', async () => {
     const res = await request(app)
-      .post('/api/transfer/part')
-      .send({ uploadId: 'nonexistent', chunkIndex: 0, data: 'AAAA' });
+      .post('/api/process/chunk')
+      .send({ sessionId: 'nonexistent', idx: 0, payload: 'AAAA' });
     expect(res.status).toBe(404);
-    expect(res.body.error).toContain('Transfer session not found');
+    expect(res.body.error).toContain('Session not found');
   });
 
-  it('returns 400 when done is missing uploadId', async () => {
+  it('returns 400 when finalize is missing sessionId', async () => {
     const res = await request(app)
-      .post('/api/transfer/done')
+      .post('/api/process/finalize')
       .send({});
     expect(res.status).toBe(400);
-    expect(res.body.error).toContain('Missing uploadId');
+    expect(res.body.error).toContain('Missing sessionId');
   });
 
-  it('returns 404 when done references unknown session', async () => {
+  it('returns 404 when finalize references unknown session', async () => {
     const res = await request(app)
-      .post('/api/transfer/done')
-      .send({ uploadId: 'nonexistent' });
+      .post('/api/process/finalize')
+      .send({ sessionId: 'nonexistent' });
     expect(res.status).toBe(404);
-    expect(res.body.error).toContain('Transfer session not found');
+    expect(res.body.error).toContain('Session not found');
   });
 });

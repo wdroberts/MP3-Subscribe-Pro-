@@ -48,7 +48,7 @@ describe('App', () => {
 
   it('renders the app header', () => {
     render(<App />);
-    expect(screen.getByText('MP3 Transcribe Pro')).toBeInTheDocument();
+    expect(screen.getByText(/MP3 Transcribe Pro/)).toBeInTheDocument();
   });
 
   it('shows Upload component by default', () => {

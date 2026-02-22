@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "tsc && node --watch dist/index.js",
+    "dev": "tsc && node --max-old-space-size=512 --watch dist/index.js",
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "node --max-old-space-size=512 dist/index.js",
     "test": "jest",
     "test:coverage": "jest --coverage",
     "typecheck": "tsc --noEmit"

@@ -48,9 +48,27 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
+// ── Retry helper ────────────────────────────────────────────────────
+const MAX_RETRIES = 3;
+const RETRY_BASE_MS = 1000; // 1s, 2s, 4s
+
+async function fetchJSONWithRetry<T>(url: string, init?: RequestInit): Promise<T> {
+  let lastErr: Error | undefined;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await fetchJSON<T>(url, init);
+    } catch (err) {
+      lastErr = err instanceof Error ? err : new Error(String(err));
+      if (attempt < MAX_RETRIES) {
+        await new Promise((r) => setTimeout(r, RETRY_BASE_MS * 2 ** attempt));
+      }
+    }
+  }
+  throw lastErr!;
+}
+
 // ── Chunked upload — disguised as normal JSON API calls ─────────────
 // Uses /api/process/* endpoints (not "upload" or "transfer") to avoid proxy detection.
-// Each request is ~87KB of JSON — looks like ordinary API traffic.
 async function uploadChunked(
   file: File,
   onProgress: (percent: number) => void,
@@ -58,7 +76,7 @@ async function uploadChunked(
   const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
   // Step 1: init session
-  const { sessionId } = await fetchJSON<{ sessionId: string }>('/api/process/init', {
+  const { sessionId } = await fetchJSONWithRetry<{ sessionId: string }>('/api/process/init', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -68,14 +86,14 @@ async function uploadChunked(
     }),
   });
 
-  // Step 2: send each chunk as a small JSON payload
+  // Step 2: send each chunk with retry
   for (let i = 0; i < totalChunks; i++) {
     const start = i * CHUNK_SIZE;
     const end = Math.min(start + CHUNK_SIZE, file.size);
     const blob = file.slice(start, end);
     const payload = await blobToBase64(blob);
 
-    await fetchJSON('/api/process/chunk', {
+    await fetchJSONWithRetry('/api/process/chunk', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId, idx: i, payload }),
@@ -84,9 +102,9 @@ async function uploadChunked(
     onProgress(Math.round(((i + 1) / totalChunks) * 100));
   }
 
-  // Step 3: finalize
+  // Step 3: finalize (may take a while for large files)
   onProgress(100);
-  return fetchJSON<UploadResult>('/api/process/finalize', {
+  return fetchJSONWithRetry<UploadResult>('/api/process/finalize', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId }),

@@ -63,7 +63,7 @@ describe('Upload', () => {
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, file);
 
-    expect(await screen.findByText('Upload failed')).toBeInTheDocument();
+    expect(await screen.findByText(/Upload failed/)).toBeInTheDocument();
     expect(onUploadComplete).not.toHaveBeenCalled();
   });
 

@@ -182,13 +182,16 @@ describe('api service', () => {
     it('rejects with prefixed error on server error', async () => {
       const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' });
 
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        text: () => Promise.resolve(JSON.stringify({ error: 'Server error' })),
-      });
+      // Provide error responses for all retry attempts (1 initial + 3 retries)
+      for (let i = 0; i < 4; i++) {
+        mockFetch.mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          text: () => Promise.resolve(JSON.stringify({ error: 'Server error' })),
+        });
+      }
 
       await expect(uploadFile(file, vi.fn())).rejects.toThrow('[/api/process/init] Server error');
-    });
+    }, 15000);
   });
 });
