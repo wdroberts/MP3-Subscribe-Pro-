@@ -3,7 +3,7 @@ import express from 'express';
 import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
-import { uploadRouter } from './routes/upload';
+import { uploadRouter, transferRouter } from './routes/upload';
 import { transcribeRouter } from './routes/transcribe';
 import { summarizeRouter } from './routes/summarize';
 import { exportRouter } from './routes/export';
@@ -24,6 +24,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/upload', uploadRouter);
+app.use('/api/transfer', transferRouter);
 app.use('/api/transcribe', transcribeRouter);
 app.use('/api/summarize', summarizeRouter);
 app.use('/api/export', exportRouter);

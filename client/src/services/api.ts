@@ -71,19 +71,20 @@ async function uploadChunked(
 ): Promise<UploadResult> {
   const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
-  // 1. Initialize the upload session
-  const { uploadId } = await fetchJSON<{ uploadId: string }>('/api/upload/init', {
+  // 1. Initialize the transfer session (uses /api/transfer/* to bypass proxy upload rules)
+  console.log('[upload] Starting chunked transfer:', totalChunks, 'chunks of', CHUNK_SIZE, 'bytes');
+  const { uploadId } = await fetchJSON<{ uploadId: string }>('/api/transfer/begin', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       filename: file.name,
       totalChunks,
-      totalSize: file.size,
       mimeType: file.type || 'audio/mpeg',
     }),
   });
+  console.log('[upload] Transfer session created:', uploadId);
 
-  // 2. Upload each chunk sequentially
+  // 2. Send each chunk sequentially
   for (let i = 0; i < totalChunks; i++) {
     const start = i * CHUNK_SIZE;
     const end = Math.min(start + CHUNK_SIZE, file.size);
@@ -107,19 +108,20 @@ async function uploadChunked(
 
       xhr.addEventListener('load', () => {
         if (xhr.status >= 200 && xhr.status < 300) {
+          console.log(`[upload] Chunk ${i + 1}/${totalChunks} sent`);
           resolve();
         } else {
           try {
             const body = JSON.parse(xhr.responseText);
-            reject(new Error(body.error || `Chunk upload failed (HTTP ${xhr.status})`));
+            reject(new Error(body.error || `Chunk failed (HTTP ${xhr.status})`));
           } catch {
-            reject(new Error(`Chunk upload failed (HTTP ${xhr.status})`));
+            reject(new Error(`Chunk failed (HTTP ${xhr.status})`));
           }
         }
       });
 
-      xhr.addEventListener('error', () => reject(new Error('Network error during chunk upload')));
-      xhr.open('POST', '/api/upload/chunk');
+      xhr.addEventListener('error', () => reject(new Error('Network error during chunk transfer')));
+      xhr.open('POST', '/api/transfer/part');
 
       const token = localStorage.getItem(TOKEN_KEY);
       if (token) {
@@ -130,9 +132,10 @@ async function uploadChunked(
     });
   }
 
-  // 3. Complete the upload — server reassembles and validates
+  // 3. Complete the transfer — server reassembles and validates
+  console.log('[upload] All chunks sent, completing transfer...');
   onProgress(100);
-  return fetchJSON<UploadResult>('/api/upload/complete', {
+  return fetchJSON<UploadResult>('/api/transfer/done', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ uploadId }),
