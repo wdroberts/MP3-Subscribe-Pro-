@@ -9,7 +9,7 @@ import { transcribeRouter } from './routes/transcribe';
 import { summarizeRouter } from './routes/summarize';
 import { exportRouter } from './routes/export';
 import { errorHandler } from './middleware/errorHandler';
-import { createRateLimiter } from './middleware/rateLimiter';
+import { createRateLimiter, createUploadRateLimiter } from './middleware/rateLimiter';
 import { ensureUploadDir, cleanupStaleUploads } from './services/fileManager';
 
 const app = express();
@@ -24,7 +24,8 @@ app.get('/api/health', (_req, res) => {
 });
 
 // Process routes accept base64-encoded chunks (~87KB each, limit gives headroom)
-app.use('/api/process', express.json({ limit: '1mb' }), processRouter);
+// Uses its own generous rate limit (5000 req/15min) instead of the global 100 req/15min
+app.use('/api/process', createUploadRateLimiter(), express.json({ limit: '1mb' }), processRouter);
 
 // Global JSON parser for all other routes
 app.use(express.json({ limit: '1mb' }));
