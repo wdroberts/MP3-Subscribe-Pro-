@@ -1,6 +1,7 @@
 import './env';
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import cors from 'cors';
 import helmet from 'helmet';
 import { processRouter } from './routes/upload';
@@ -34,26 +35,62 @@ app.use('/api/export', exportRouter);
 
 app.use(errorHandler);
 
-// Serve the production-built client
+// ── Self-contained SPA served from an API path ──────────────────────
+// The platform proxy caches all static paths (/, /app, /assets/*) but
+// passes /api/* through to our server.  So we inline ALL JS + CSS into
+// a single HTML response on /api/spa.  Nothing external to cache.
 const clientDist = path.resolve(__dirname, '../../client/dist');
-app.use(express.static(clientDist, {
-  index: false,
-  setHeaders: (res) => {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  },
-}));
+let inlineSpaHtml: string | null = null;
 
-function sendApp(_req: express.Request, res: express.Response) {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.sendFile(path.join(clientDist, 'index.html'));
+function buildInlineSpa(): string {
+  if (inlineSpaHtml) return inlineSpaHtml;
+
+  // Read the built index.html to find asset filenames
+  const html = fs.readFileSync(path.join(clientDist, 'index.html'), 'utf-8');
+
+  // Extract JS and CSS filenames from the HTML
+  const jsMatch = html.match(/src="\/assets\/(index-[^"]+\.js)"/);
+  const cssMatch = html.match(/href="\/assets\/(index-[^"]+\.css)"/);
+
+  let jsContent = '';
+  let cssContent = '';
+
+  if (jsMatch) {
+    jsContent = fs.readFileSync(path.join(clientDist, 'assets', jsMatch[1]), 'utf-8');
+  }
+  if (cssMatch) {
+    cssContent = fs.readFileSync(path.join(clientDist, 'assets', cssMatch[1]), 'utf-8');
+  }
+
+  // Build a completely self-contained HTML page — no external requests needed
+  inlineSpaHtml = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>MP3 Transcribe Pro</title>
+<style>${cssContent}</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="module">${jsContent}</script>
+</body>
+</html>`;
+
+  return inlineSpaHtml;
 }
 
-// Primary entry point — fresh URL the proxy has never cached
-app.get('/app', sendApp);
-// Redirect root to /app to bypass proxy HTML cache
-app.get('/', (_req, res) => { res.redirect(302, '/app'); });
-// SPA fallback for client-side routing
-app.get('*', sendApp);
+// THE endpoint — proxy can't cache /api/* paths
+app.get('/api/spa', (_req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.send(buildInlineSpa());
+});
+
+// Static assets still available as fallback
+app.use(express.static(clientDist, { index: false }));
+// All other routes redirect to /api/spa
+app.get('*', (_req, res) => { res.redirect(302, '/api/spa'); });
 
 async function start() {
   await ensureUploadDir();

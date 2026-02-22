@@ -1,13 +1,13 @@
 import { defineConfig, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
-/** Redirect /app → / in dev mode so the same URL works everywhere */
-function appRedirect(): Plugin {
+/** In dev mode, redirect /api/spa to / so the same URL works everywhere */
+function spaRedirect(): Plugin {
   return {
-    name: 'app-redirect',
+    name: 'spa-redirect',
     configureServer(server) {
       server.middlewares.use((req, _res, next) => {
-        if (req.url === '/app' || req.url === '/app/') {
+        if (req.url === '/api/spa') {
           req.url = '/';
         }
         next();
@@ -17,9 +17,9 @@ function appRedirect(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), appRedirect()],
+  plugins: [react(), spaRedirect()],
   server: {
-    open: '/app',
+    open: '/',
     headers: {
       'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
       'Pragma': 'no-cache',
