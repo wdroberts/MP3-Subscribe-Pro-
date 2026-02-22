@@ -17,6 +17,12 @@ export default function Upload({ onUploadComplete }: UploadProps) {
 
   const handleFile = async (file: File) => {
     // Client-side validation
+    const MAX_FILE_SIZE_MB = 200;
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      setError(`File is too large (${formatFileSize(file.size)}). Maximum allowed size is ${MAX_FILE_SIZE_MB} MB.`);
+      return;
+    }
+
     const validExtensions = ['.mp3', '.m4a', '.aac', '.wav', '.ogg', '.flac', '.webm'];
     const hasAudioMime = file.type.startsWith('audio/');
     const hasValidExtension = validExtensions.some((ext) => file.name.toLowerCase().endsWith(ext));

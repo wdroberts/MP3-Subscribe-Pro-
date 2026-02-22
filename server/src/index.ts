@@ -23,8 +23,8 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Process routes accept small JSON payloads (~87KB each)
-app.use('/api/process', express.json({ limit: '256kb' }), processRouter);
+// Process routes accept base64-encoded chunks (~87KB each, limit gives headroom)
+app.use('/api/process', express.json({ limit: '1mb' }), processRouter);
 
 // Global JSON parser for all other routes
 app.use(express.json({ limit: '1mb' }));

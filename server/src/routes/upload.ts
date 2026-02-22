@@ -129,6 +129,16 @@ processRouter.post(
       await fs.rm(state.dir, { recursive: true, force: true });
       sessions.delete(sessionId);
 
+      const maxMb = parseInt(process.env.MAX_FILE_SIZE_MB || '200', 10);
+      const stat = await fs.stat(assembledPath);
+      if (stat.size > maxMb * 1024 * 1024) {
+        await fs.rm(assembledDir, { recursive: true, force: true });
+        res.status(413).json({
+          error: `File too large (${(stat.size / 1e6).toFixed(1)} MB). Maximum is ${maxMb} MB.`,
+        });
+        return;
+      }
+
       const isValid = await validateMp3(assembledPath);
       if (!isValid) {
         await fs.rm(assembledDir, { recursive: true, force: true });
@@ -136,7 +146,6 @@ processRouter.post(
         return;
       }
 
-      const stat = await fs.stat(assembledPath);
       res.status(201).json({
         id: assembledId,
         filename: state.name,
