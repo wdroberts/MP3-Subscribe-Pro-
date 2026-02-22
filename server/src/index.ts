@@ -35,11 +35,24 @@ app.use('/api/export', exportRouter);
 
 app.use(errorHandler);
 
-// Serve the production-built client (hashed filenames prevent caching issues)
+// Serve the production-built client
 const clientDist = path.resolve(__dirname, '../../client/dist');
-app.use(express.static(clientDist));
+// Static assets (JS/CSS) have hashed names — safe to cache
+// HTML must never be cached so the browser always gets the latest JS references
+app.use(express.static(clientDist, {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+  },
+}));
 // SPA fallback: serve index.html for any non-API route
 app.get('*', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.sendFile(path.join(clientDist, 'index.html'));
 });
 

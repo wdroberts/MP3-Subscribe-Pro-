@@ -23,7 +23,7 @@ function App() {
     <div className="app">
       <header className="app-header">
         <h1>MP3 Transcribe Pro</h1>
-        <p>Upload an MP3 file to transcribe, summarize, and export.</p>
+        <p>Upload an MP3 file to transcribe, summarize, and export. <span style={{fontSize: '0.7em', opacity: 0.5}}>v3</span></p>
       </header>
 
       <main className="app-main">

@@ -127,13 +127,11 @@ async function uploadChunked(
 }
 
 // ── Public API ──────────────────────────────────────────────────────
+// Always use chunked transfer (JSON-only, no multipart) to bypass proxy restrictions
 export async function uploadFile(
   file: File,
   onProgress: (percent: number) => void,
 ): Promise<UploadResult> {
-  if (file.size <= CHUNK_SIZE) {
-    return uploadSmallFile(file, onProgress);
-  }
   return uploadChunked(file, onProgress);
 }
 
