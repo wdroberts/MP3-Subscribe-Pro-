@@ -18,22 +18,6 @@ export async function ensureUploadDir(): Promise<void> {
   await fs.mkdir(UPLOAD_DIR, { recursive: true });
 }
 
-export async function saveUpload(file: Express.Multer.File): Promise<UploadResult> {
-  const id = uuidv4();
-  const uploadPath = path.join(UPLOAD_DIR, id);
-  await fs.mkdir(uploadPath, { recursive: true });
-
-  const destPath = path.join(uploadPath, 'original.mp3');
-  await fs.rename(file.path, destPath);
-
-  return {
-    id,
-    filename: file.originalname,
-    mimeType: file.mimetype,
-    sizeBytes: file.size,
-    createdAt: new Date().toISOString(),
-  };
-}
 
 export async function uploadExists(uploadId: string): Promise<boolean> {
   if (!isValidUploadId(uploadId)) return false;

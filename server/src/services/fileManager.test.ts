@@ -3,7 +3,6 @@ import path from 'path';
 import {
   getUploadDir,
   ensureUploadDir,
-  saveUpload,
   uploadExists,
   cleanupUpload,
   cleanupStaleUploads,
@@ -31,36 +30,6 @@ describe('fileManager', () => {
       mockedFs.mkdir.mockResolvedValue(undefined);
       await ensureUploadDir();
       expect(mockedFs.mkdir).toHaveBeenCalledWith(UPLOAD_DIR, { recursive: true });
-    });
-  });
-
-  describe('saveUpload', () => {
-    it('saves a file and returns UploadResult', async () => {
-      mockedFs.mkdir.mockResolvedValue(undefined);
-      mockedFs.rename.mockResolvedValue(undefined);
-
-      const mockFile = {
-        path: '/tmp/abc123',
-        originalname: 'test.mp3',
-        mimetype: 'audio/mpeg',
-        size: 1024,
-      } as Express.Multer.File;
-
-      const result = await saveUpload(mockFile);
-
-      expect(result.id).toBe('test-uuid-1234');
-      expect(result.filename).toBe('test.mp3');
-      expect(result.mimeType).toBe('audio/mpeg');
-      expect(result.sizeBytes).toBe(1024);
-      expect(result.createdAt).toBeDefined();
-      expect(mockedFs.mkdir).toHaveBeenCalledWith(
-        path.join(UPLOAD_DIR, 'test-uuid-1234'),
-        { recursive: true },
-      );
-      expect(mockedFs.rename).toHaveBeenCalledWith(
-        '/tmp/abc123',
-        path.join(UPLOAD_DIR, 'test-uuid-1234', 'original.mp3'),
-      );
     });
   });
 

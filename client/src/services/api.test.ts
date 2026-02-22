@@ -16,37 +16,17 @@ Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock });
 const mockFetch = vi.fn();
 globalThis.fetch = mockFetch;
 
-// Mock XMLHttpRequest for uploadFile tests
-function createMockXHR() {
-  const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
-  const uploadListeners: Record<string, ((...args: unknown[]) => void)[]> = {};
-
-  const xhr = {
-    open: vi.fn(),
-    send: vi.fn(),
-    setRequestHeader: vi.fn(),
-    status: 200,
-    responseText: '',
-    upload: {
-      addEventListener: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
-        uploadListeners[event] = uploadListeners[event] || [];
-        uploadListeners[event].push(cb);
-      }),
-    },
-    addEventListener: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
-      listeners[event] = listeners[event] || [];
-      listeners[event].push(cb);
-    }),
-    // helpers to trigger events from tests
-    _triggerUpload(event: string, data: unknown) {
-      (uploadListeners[event] || []).forEach((cb) => cb(data));
-    },
-    _trigger(event: string) {
-      (listeners[event] || []).forEach((cb) => cb());
-    },
-  };
-  return xhr;
+// Mock FileReader for blobToBase64
+class MockFileReader {
+  onload: ((e: { target: { result: string } }) => void) | null = null;
+  onerror: ((err: Error) => void) | null = null;
+  result: string = '';
+  readAsDataURL(_blob: Blob) {
+    this.result = 'data:application/octet-stream;base64,AAAA';
+    if (this.onload) this.onload({ target: { result: this.result } });
+  }
 }
+vi.stubGlobal('FileReader', MockFileReader);
 
 describe('api service', () => {
   beforeEach(() => {
@@ -86,7 +66,8 @@ describe('api service', () => {
     it('throws when response is not ok', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
-        json: () => Promise.resolve({ error: 'Upload not found' }),
+        status: 404,
+        text: () => Promise.resolve(JSON.stringify({ error: 'Upload not found' })),
       });
 
       await expect(startTranscription('bad-id')).rejects.toThrow('Upload not found');
@@ -123,7 +104,8 @@ describe('api service', () => {
     it('throws when response is not ok', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
-        json: () => Promise.resolve({ error: 'Not found' }),
+        status: 404,
+        text: () => Promise.resolve(JSON.stringify({ error: 'Not found' })),
       });
 
       await expect(pollTranscriptionStatus('bad-id')).rejects.toThrow('Not found');
@@ -148,139 +130,65 @@ describe('api service', () => {
     it('throws when response is not ok', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
-        json: () => Promise.resolve({ error: 'Summarization failed' }),
+        status: 500,
+        text: () => Promise.resolve(JSON.stringify({ error: 'Summarization failed' })),
       });
 
       await expect(requestSummarization('bad-id')).rejects.toThrow('Summarization failed');
     });
   });
 
-  describe('uploadFile', () => {
-    let mockXHR: ReturnType<typeof createMockXHR>;
-
-    beforeEach(() => {
-      mockXHR = createMockXHR();
-      vi.stubGlobal('XMLHttpRequest', vi.fn(() => mockXHR));
-    });
-
-    it('sends file to /api/upload via XHR', async () => {
-      const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' });
+  describe('uploadFile (chunked)', () => {
+    it('sends chunked upload via /api/process/* endpoints', async () => {
+      const file = new File(['audio-data-here'], 'test.mp3', { type: 'audio/mpeg' });
       const onProgress = vi.fn();
 
-      const uploadResult = {
-        id: 'upload-1',
-        filename: 'test.mp3',
+      // Mock init
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ sessionId: 'sess-123' }),
+      });
 
-        mimeType: 'audio/mpeg',
-        sizeBytes: 5,
-        createdAt: '2025-01-01T00:00:00.000Z',
-      };
+      // Mock chunk (file is small so only 1 chunk)
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ idx: 0, done: 1, total: 1 }),
+      });
 
-      // Trigger load event after send is called
-      mockXHR.send.mockImplementation(() => {
-        mockXHR.status = 201;
-        mockXHR.responseText = JSON.stringify(uploadResult);
-        mockXHR._trigger('load');
+      // Mock finalize
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          id: 'upload-1',
+          filename: 'test.mp3',
+          mimeType: 'audio/mpeg',
+          sizeBytes: 15,
+          createdAt: '2025-01-01T00:00:00.000Z',
+        }),
       });
 
       const result = await uploadFile(file, onProgress);
-      expect(mockXHR.open).toHaveBeenCalledWith('POST', '/api/upload');
-      expect(result).toEqual(uploadResult);
+
+      // Verify init call
+      expect(mockFetch.mock.calls[0][0]).toBe('/api/process/init');
+      // Verify chunk call
+      expect(mockFetch.mock.calls[1][0]).toBe('/api/process/chunk');
+      // Verify finalize call
+      expect(mockFetch.mock.calls[2][0]).toBe('/api/process/finalize');
+      expect(result.id).toBe('upload-1');
+      expect(onProgress).toHaveBeenCalled();
     });
 
-    it('reports upload progress', async () => {
-      const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' });
-      const onProgress = vi.fn();
-
-      mockXHR.send.mockImplementation(() => {
-        // Simulate progress event
-        mockXHR._triggerUpload('progress', { lengthComputable: true, loaded: 50, total: 100 });
-        mockXHR._triggerUpload('progress', { lengthComputable: true, loaded: 100, total: 100 });
-        // Then complete
-        mockXHR.status = 200;
-        mockXHR.responseText = JSON.stringify({ id: 'up-1', filename: 'test.mp3', mimeType: 'audio/mpeg', sizeBytes: 5, createdAt: '' });
-        mockXHR._trigger('load');
-      });
-
-      await uploadFile(file, onProgress);
-      expect(onProgress).toHaveBeenCalledWith(50);
-      expect(onProgress).toHaveBeenCalledWith(100);
-    });
-
-    it('does not report progress when not lengthComputable', async () => {
-      const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' });
-      const onProgress = vi.fn();
-
-      mockXHR.send.mockImplementation(() => {
-        mockXHR._triggerUpload('progress', { lengthComputable: false, loaded: 0, total: 0 });
-        mockXHR.status = 200;
-        mockXHR.responseText = JSON.stringify({ id: 'up-1', filename: 'test.mp3', mimeType: 'audio/mpeg', sizeBytes: 5, createdAt: '' });
-        mockXHR._trigger('load');
-      });
-
-      await uploadFile(file, onProgress);
-      expect(onProgress).not.toHaveBeenCalled();
-    });
-
-    it('rejects with error message from response on non-2xx status', async () => {
+    it('rejects with prefixed error on server error', async () => {
       const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' });
 
-      mockXHR.send.mockImplementation(() => {
-        mockXHR.status = 400;
-        mockXHR.responseText = JSON.stringify({ error: 'File too large' });
-        mockXHR._trigger('load');
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve(JSON.stringify({ error: 'Server error' })),
       });
 
-      await expect(uploadFile(file, vi.fn())).rejects.toThrow('File too large');
-    });
-
-    it('rejects with default message when response has no error field', async () => {
-      const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' });
-
-      mockXHR.send.mockImplementation(() => {
-        mockXHR.status = 500;
-        mockXHR.responseText = JSON.stringify({});
-        mockXHR._trigger('load');
-      });
-
-      await expect(uploadFile(file, vi.fn())).rejects.toThrow('Upload failed (HTTP 500)');
-    });
-
-    it('rejects with network error on XHR error event', async () => {
-      const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' });
-
-      mockXHR.send.mockImplementation(() => {
-        mockXHR._trigger('error');
-      });
-
-      await expect(uploadFile(file, vi.fn())).rejects.toThrow('Network error during upload');
-    });
-
-    it('sets Authorization header when token exists', async () => {
-      localStorageMock.setItem('mp3_auth_token', 'my-token');
-      const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' });
-
-      mockXHR.send.mockImplementation(() => {
-        mockXHR.status = 200;
-        mockXHR.responseText = JSON.stringify({ id: 'up-1', filename: 'test.mp3', mimeType: 'audio/mpeg', sizeBytes: 5, createdAt: '' });
-        mockXHR._trigger('load');
-      });
-
-      await uploadFile(file, vi.fn());
-      expect(mockXHR.setRequestHeader).toHaveBeenCalledWith('Authorization', 'Bearer my-token');
-    });
-
-    it('does not set Authorization header when no token', async () => {
-      const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' });
-
-      mockXHR.send.mockImplementation(() => {
-        mockXHR.status = 200;
-        mockXHR.responseText = JSON.stringify({ id: 'up-1', filename: 'test.mp3', mimeType: 'audio/mpeg', sizeBytes: 5, createdAt: '' });
-        mockXHR._trigger('load');
-      });
-
-      await uploadFile(file, vi.fn());
-      expect(mockXHR.setRequestHeader).not.toHaveBeenCalled();
+      await expect(uploadFile(file, vi.fn())).rejects.toThrow('[/api/process/init] Server error');
     });
   });
 });
