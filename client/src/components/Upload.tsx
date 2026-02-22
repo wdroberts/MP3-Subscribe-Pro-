@@ -9,33 +9,29 @@ interface UploadProps {
 
 export default function Upload({ onUploadComplete }: UploadProps) {
   const [dragover, setDragover] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [progress, setProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = (file: File) => {
-    setSelectedFile(file);
-    setError(null);
-    setProgress(0);
-
-    // Client-side validation: accept any audio MIME type or common audio extensions
+  const handleFile = async (file: File) => {
+    // Client-side validation
     const validExtensions = ['.mp3', '.m4a', '.aac', '.wav', '.ogg', '.flac', '.webm'];
     const hasAudioMime = file.type.startsWith('audio/');
     const hasValidExtension = validExtensions.some((ext) => file.name.toLowerCase().endsWith(ext));
     if (!hasAudioMime && !hasValidExtension) {
       setError(`File type "${file.type || 'unknown'}" is not supported. Please upload an audio file.`);
+      return;
     }
-  };
 
-  const handleUpload = async () => {
-    if (!selectedFile) return;
+    setFileName(`${file.name} (${formatFileSize(file.size)})`);
     setError(null);
+    setProgress(0);
     setIsUploading(true);
 
     try {
-      const result = await uploadFile(selectedFile, setProgress);
+      const result = await uploadFile(file, setProgress);
       onUploadComplete(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
@@ -48,37 +44,12 @@ export default function Upload({ onUploadComplete }: UploadProps) {
     e.preventDefault();
     setDragover(false);
     const file = e.dataTransfer.files[0];
-    if (file) handleFileSelect(file);
+    if (file) handleFile(file);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleFileSelect(file);
-  };
-
-  const handleZoneClick = () => {
-    // If a file is already selected and valid, don't re-open the file picker
-    // — let them use the Upload button instead
-    if (!selectedFile || error) {
-      inputRef.current?.click();
-    }
-  };
-
-  // Determine button text and action based on state
-  const getButtonLabel = () => {
-    if (isUploading) return `Uploading... ${progress}%`;
-    if (selectedFile && !error) return `Upload ${selectedFile.name}`;
-    return 'Choose File';
-  };
-
-  const handleButtonClick = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent the zone click from also firing
-    if (isUploading) return;
-    if (selectedFile && !error) {
-      handleUpload();
-    } else {
-      inputRef.current?.click();
-    }
+    if (file) handleFile(file);
   };
 
   return (
@@ -91,7 +62,7 @@ export default function Upload({ onUploadComplete }: UploadProps) {
         }}
         onDragLeave={() => setDragover(false)}
         onDrop={handleDrop}
-        onClick={handleZoneClick}
+        onClick={() => inputRef.current?.click()}
       >
         <input
           ref={inputRef}
@@ -99,22 +70,17 @@ export default function Upload({ onUploadComplete }: UploadProps) {
           accept=".mp3,.m4a,.aac,.wav,.ogg,.flac,.webm,audio/*"
           onChange={handleFileChange}
         />
-
-        {selectedFile ? (
-          <p>{selectedFile.name} ({formatFileSize(selectedFile.size)})</p>
-        ) : (
-          <p>Drag & drop an audio file here, or click to browse</p>
-        )}
-
-        <button
-          className="upload-btn"
-          type="button"
-          disabled={isUploading}
-          onClick={handleButtonClick}
-        >
-          {getButtonLabel()}
+        <p>Drag & drop an audio file here, or click to browse</p>
+        <button className="upload-btn" type="button" disabled={isUploading}>
+          {isUploading ? 'Uploading...' : 'Choose File'}
         </button>
       </div>
+
+      {fileName && (
+        <div className="file-info">
+          <p>{fileName}</p>
+        </div>
+      )}
 
       {isUploading && (
         <div className="progress-bar-container">
