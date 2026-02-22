@@ -45,7 +45,7 @@ const upload = multer({
 // Chunk uploads use application/octet-stream — no MIME filtering needed
 const chunkUpload = multer({
   dest: process.env.UPLOAD_DIR || './tmp/uploads',
-  limits: { fileSize: 52 * 1024 * 1024 }, // 50 MB per chunk + overhead
+  limits: { fileSize: 10 * 1024 * 1024 }, // 5 MB per chunk + overhead
 });
 
 // Track in-progress chunked uploads: uploadId → { totalChunks, receivedChunks, filename, mimeType, totalSize }

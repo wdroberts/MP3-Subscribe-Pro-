@@ -1,7 +1,7 @@
 import { UploadResult, TranscriptionResult, SummarizationResult } from '../types/index.ts';
 
 const TOKEN_KEY = 'mp3_auth_token';
-const CHUNK_SIZE = 40 * 1024 * 1024; // 40 MB per chunk — safely under platform proxy limits
+const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk — small enough for restrictive platform proxies
 
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem(TOKEN_KEY);
