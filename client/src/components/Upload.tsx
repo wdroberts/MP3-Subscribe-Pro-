@@ -15,7 +15,7 @@ export default function Upload({ onUploadComplete }: UploadProps) {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleUpload = async (file: File) => {
+  const handleFileSelect = (file: File) => {
     setSelectedFile(file);
     setError(null);
     setProgress(0);
@@ -26,13 +26,16 @@ export default function Upload({ onUploadComplete }: UploadProps) {
     const hasValidExtension = validExtensions.some((ext) => file.name.toLowerCase().endsWith(ext));
     if (!hasAudioMime && !hasValidExtension) {
       setError(`File type "${file.type || 'unknown'}" is not supported. Please upload an audio file.`);
-      return;
     }
+  };
 
+  const handleUpload = async () => {
+    if (!selectedFile) return;
+    setError(null);
     setIsUploading(true);
 
     try {
-      const result = await uploadFile(file, setProgress);
+      const result = await uploadFile(selectedFile, setProgress);
       onUploadComplete(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
@@ -45,12 +48,12 @@ export default function Upload({ onUploadComplete }: UploadProps) {
     e.preventDefault();
     setDragover(false);
     const file = e.dataTransfer.files[0];
-    if (file) handleUpload(file);
+    if (file) handleFileSelect(file);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleUpload(file);
+    if (file) handleFileSelect(file);
   };
 
   return (
@@ -77,9 +80,18 @@ export default function Upload({ onUploadComplete }: UploadProps) {
         </button>
       </div>
 
-      {selectedFile && (
+      {selectedFile && !isUploading && !error && (
         <div className="file-info">
-          {selectedFile.name} ({formatFileSize(selectedFile.size)})
+          <p>{selectedFile.name} ({formatFileSize(selectedFile.size)})</p>
+          <button className="upload-btn" type="button" onClick={handleUpload}>
+            Upload
+          </button>
+        </div>
+      )}
+
+      {selectedFile && error && (
+        <div className="file-info">
+          <p>{selectedFile.name} ({formatFileSize(selectedFile.size)})</p>
         </div>
       )}
 

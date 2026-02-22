@@ -34,6 +34,16 @@ describe('Upload', () => {
     expect(input).toHaveAttribute('accept', '.mp3,.m4a,.aac,.wav,.ogg,.flac,.webm,audio/*');
   });
 
+  it('shows Upload button after selecting a file', async () => {
+    render(<Upload onUploadComplete={onUploadComplete} />);
+
+    const file = new File(['audio content'], 'test.mp3', { type: 'audio/mpeg' });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await userEvent.upload(input, file);
+
+    expect(screen.getByRole('button', { name: 'Upload' })).toBeInTheDocument();
+  });
+
   it('calls uploadFile and onUploadComplete on successful upload', async () => {
     const mockResult = {
       id: 'upload-1',
@@ -50,6 +60,9 @@ describe('Upload', () => {
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, file);
 
+    const uploadBtn = screen.getByRole('button', { name: 'Upload' });
+    await userEvent.click(uploadBtn);
+
     expect(mockUploadFile).toHaveBeenCalledWith(file, expect.any(Function));
     expect(onUploadComplete).toHaveBeenCalledWith(mockResult);
   });
@@ -62,6 +75,9 @@ describe('Upload', () => {
     const file = new File(['audio content'], 'test.mp3', { type: 'audio/mpeg' });
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, file);
+
+    const uploadBtn = screen.getByRole('button', { name: 'Upload' });
+    await userEvent.click(uploadBtn);
 
     expect(await screen.findByText('Upload failed')).toBeInTheDocument();
     expect(onUploadComplete).not.toHaveBeenCalled();
