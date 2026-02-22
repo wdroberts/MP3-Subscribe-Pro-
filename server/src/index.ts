@@ -23,9 +23,9 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Process routes accept base64-encoded chunks (~87KB each, limit gives headroom)
+// Process routes accept base64-encoded chunks (~1.33MB each after encoding, limit gives headroom)
 // Uses its own generous rate limit (5000 req/15min) instead of the global 100 req/15min
-app.use('/api/process', createUploadRateLimiter(), express.json({ limit: '1mb' }), processRouter);
+app.use('/api/process', createUploadRateLimiter(), express.json({ limit: '2mb' }), processRouter);
 
 // Global JSON parser for all other routes
 app.use(express.json({ limit: '1mb' }));

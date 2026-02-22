@@ -1,7 +1,7 @@
 import { UploadResult, TranscriptionResult, SummarizationResult } from '../types/index.ts';
 
 const TOKEN_KEY = 'mp3_auth_token';
-const CHUNK_SIZE = 64 * 1024; // 64 KB — base64 ≈ 87KB per request, indistinguishable from normal API traffic
+const CHUNK_SIZE = 1024 * 1024; // 1 MB — base64 ≈ 1.33MB per request
 
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem(TOKEN_KEY);
