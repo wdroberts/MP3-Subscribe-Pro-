@@ -56,6 +56,31 @@ export default function Upload({ onUploadComplete }: UploadProps) {
     if (file) handleFileSelect(file);
   };
 
+  const handleZoneClick = () => {
+    // If a file is already selected and valid, don't re-open the file picker
+    // — let them use the Upload button instead
+    if (!selectedFile || error) {
+      inputRef.current?.click();
+    }
+  };
+
+  // Determine button text and action based on state
+  const getButtonLabel = () => {
+    if (isUploading) return `Uploading... ${progress}%`;
+    if (selectedFile && !error) return `Upload ${selectedFile.name}`;
+    return 'Choose File';
+  };
+
+  const handleButtonClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent the zone click from also firing
+    if (isUploading) return;
+    if (selectedFile && !error) {
+      handleUpload();
+    } else {
+      inputRef.current?.click();
+    }
+  };
+
   return (
     <div>
       <div
@@ -66,7 +91,7 @@ export default function Upload({ onUploadComplete }: UploadProps) {
         }}
         onDragLeave={() => setDragover(false)}
         onDrop={handleDrop}
-        onClick={() => inputRef.current?.click()}
+        onClick={handleZoneClick}
       >
         <input
           ref={inputRef}
@@ -74,26 +99,22 @@ export default function Upload({ onUploadComplete }: UploadProps) {
           accept=".mp3,.m4a,.aac,.wav,.ogg,.flac,.webm,audio/*"
           onChange={handleFileChange}
         />
-        <p>Drag & drop an audio file here, or click to browse</p>
-        <button className="upload-btn" type="button" disabled={isUploading}>
-          {isUploading ? 'Uploading...' : 'Choose File'}
+
+        {selectedFile ? (
+          <p>{selectedFile.name} ({formatFileSize(selectedFile.size)})</p>
+        ) : (
+          <p>Drag & drop an audio file here, or click to browse</p>
+        )}
+
+        <button
+          className="upload-btn"
+          type="button"
+          disabled={isUploading}
+          onClick={handleButtonClick}
+        >
+          {getButtonLabel()}
         </button>
       </div>
-
-      {selectedFile && !isUploading && !error && (
-        <div className="file-info">
-          <p>{selectedFile.name} ({formatFileSize(selectedFile.size)})</p>
-          <button className="upload-btn" type="button" onClick={handleUpload}>
-            Upload
-          </button>
-        </div>
-      )}
-
-      {selectedFile && error && (
-        <div className="file-info">
-          <p>{selectedFile.name} ({formatFileSize(selectedFile.size)})</p>
-        </div>
-      )}
 
       {isUploading && (
         <div className="progress-bar-container">

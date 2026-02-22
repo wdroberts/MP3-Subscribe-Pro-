@@ -28,20 +28,20 @@ describe('Upload', () => {
     expect(screen.getByRole('button', { name: 'Choose File' })).toBeInTheDocument();
   });
 
-  it('renders a file input that accepts MP3 files', () => {
+  it('renders a file input that accepts audio files', () => {
     render(<Upload onUploadComplete={onUploadComplete} />);
     const input = document.querySelector('input[type="file"]');
     expect(input).toHaveAttribute('accept', '.mp3,.m4a,.aac,.wav,.ogg,.flac,.webm,audio/*');
   });
 
-  it('shows Upload button after selecting a file', async () => {
+  it('changes button to Upload after selecting a file', async () => {
     render(<Upload onUploadComplete={onUploadComplete} />);
 
     const file = new File(['audio content'], 'test.mp3', { type: 'audio/mpeg' });
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, file);
 
-    expect(screen.getByRole('button', { name: 'Upload' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Upload test\.mp3/ })).toBeInTheDocument();
   });
 
   it('calls uploadFile and onUploadComplete on successful upload', async () => {
@@ -60,7 +60,7 @@ describe('Upload', () => {
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, file);
 
-    const uploadBtn = screen.getByRole('button', { name: 'Upload' });
+    const uploadBtn = screen.getByRole('button', { name: /Upload test\.mp3/ });
     await userEvent.click(uploadBtn);
 
     expect(mockUploadFile).toHaveBeenCalledWith(file, expect.any(Function));
@@ -76,7 +76,7 @@ describe('Upload', () => {
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, file);
 
-    const uploadBtn = screen.getByRole('button', { name: 'Upload' });
+    const uploadBtn = screen.getByRole('button', { name: /Upload test\.mp3/ });
     await userEvent.click(uploadBtn);
 
     expect(await screen.findByText('Upload failed')).toBeInTheDocument();
