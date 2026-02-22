@@ -1,5 +1,6 @@
 import './env';
 import express from 'express';
+import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
 import { uploadRouter } from './routes/upload';
@@ -13,10 +14,8 @@ import { ensureUploadDir, cleanupStaleUploads } from './services/fileManager';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(helmet());
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
-}));
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 app.use(createRateLimiter());
 
@@ -30,6 +29,14 @@ app.use('/api/summarize', summarizeRouter);
 app.use('/api/export', exportRouter);
 
 app.use(errorHandler);
+
+// Serve the production-built client (hashed filenames prevent caching issues)
+const clientDist = path.resolve(__dirname, '../../client/dist');
+app.use(express.static(clientDist));
+// SPA fallback: serve index.html for any non-API route
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(clientDist, 'index.html'));
+});
 
 async function start() {
   await ensureUploadDir();
