@@ -16,15 +16,19 @@ const PORT = process.env.PORT || 3001;
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
-app.use(express.json({ limit: '1mb' }));
 app.use(createRateLimiter());
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
+// Transfer routes accept base64 chunks — need higher JSON limit (1MB raw ≈ 1.4MB base64)
+app.use('/api/transfer', express.json({ limit: '2mb' }), transferRouter);
+
+// Global JSON parser for all other routes
+app.use(express.json({ limit: '1mb' }));
+
 app.use('/api/upload', uploadRouter);
-app.use('/api/transfer', transferRouter);
 app.use('/api/transcribe', transcribeRouter);
 app.use('/api/summarize', summarizeRouter);
 app.use('/api/export', exportRouter);

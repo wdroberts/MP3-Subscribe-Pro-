@@ -273,38 +273,33 @@ transferRouter.post(
   },
 );
 
+// Accepts base64-encoded chunk data in JSON body (no multipart/form-data)
 transferRouter.post(
   '/part',
-  chunkUpload.single('chunk'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const uploadId = req.body.uploadId;
-      const chunkIndex = parseInt(req.body.chunkIndex, 10);
+      const { uploadId, chunkIndex, data } = req.body;
+      const idx = typeof chunkIndex === 'number' ? chunkIndex : parseInt(chunkIndex, 10);
 
-      if (!uploadId || isNaN(chunkIndex)) {
-        if (req.file) await fs.unlink(req.file.path).catch(() => {});
-        res.status(400).json({ error: 'Missing uploadId or chunkIndex' });
+      if (!uploadId || isNaN(idx) || !data) {
+        res.status(400).json({ error: 'Missing uploadId, chunkIndex, or data' });
         return;
       }
 
       const state = chunkedUploads.get(uploadId);
       if (!state) {
-        if (req.file) await fs.unlink(req.file.path).catch(() => {});
         res.status(404).json({ error: 'Transfer session not found' });
         return;
       }
 
-      if (!req.file) {
-        res.status(400).json({ error: 'No chunk data received' });
-        return;
-      }
-
-      const chunkPath = path.join(state.chunksDir, `chunk-${String(chunkIndex).padStart(5, '0')}`);
-      await fs.rename(req.file.path, chunkPath);
-      state.receivedChunks.add(chunkIndex);
+      // Decode base64 and write to chunk file
+      const buffer = Buffer.from(data, 'base64');
+      const chunkPath = path.join(state.chunksDir, `chunk-${String(idx).padStart(5, '0')}`);
+      await fs.writeFile(chunkPath, buffer);
+      state.receivedChunks.add(idx);
 
       res.status(200).json({
-        chunkIndex,
+        chunkIndex: idx,
         received: state.receivedChunks.size,
         total: state.totalChunks,
       });

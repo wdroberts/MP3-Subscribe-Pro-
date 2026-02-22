@@ -1,7 +1,7 @@
 import { UploadResult, TranscriptionResult, SummarizationResult } from '../types/index.ts';
 
 const TOKEN_KEY = 'mp3_auth_token';
-const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk — small enough for restrictive platform proxies
+const CHUNK_SIZE = 1 * 1024 * 1024; // 1 MB per chunk — sent as base64 JSON to avoid proxy multipart detection
 
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem(TOKEN_KEY);
@@ -64,15 +64,29 @@ function uploadSmallFile(
   });
 }
 
+// ── Read a Blob as base64 (avoids multipart/form-data entirely) ─────
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      resolve(dataUrl.split(',')[1]); // strip "data:...;base64," prefix
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 // ── Chunked upload (files > CHUNK_SIZE) ─────────────────────────────
+// Every request is Content-Type: application/json — no multipart/form-data at all.
+// This bypasses platform proxies that detect file uploads via Content-Type or URL.
 async function uploadChunked(
   file: File,
   onProgress: (percent: number) => void,
 ): Promise<UploadResult> {
   const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
-  // 1. Initialize the transfer session (uses /api/transfer/* to bypass proxy upload rules)
-  console.log('[upload] Starting chunked transfer:', totalChunks, 'chunks of', CHUNK_SIZE, 'bytes');
+  console.log('[transfer] begin:', totalChunks, 'chunks,', file.size, 'bytes total');
   const { uploadId } = await fetchJSON<{ uploadId: string }>('/api/transfer/begin', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -82,58 +96,28 @@ async function uploadChunked(
       mimeType: file.type || 'audio/mpeg',
     }),
   });
-  console.log('[upload] Transfer session created:', uploadId);
+  console.log('[transfer] session:', uploadId);
 
-  // 2. Send each chunk sequentially
+  // Send each chunk as base64-encoded JSON (no FormData, no multipart headers)
   for (let i = 0; i < totalChunks; i++) {
     const start = i * CHUNK_SIZE;
     const end = Math.min(start + CHUNK_SIZE, file.size);
     const blob = file.slice(start, end);
+    const data = await blobToBase64(blob);
 
-    const formData = new FormData();
-    formData.append('chunk', blob, `chunk-${i}`);
-    formData.append('uploadId', uploadId);
-    formData.append('chunkIndex', String(i));
-
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-
-      xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable) {
-          const chunkProgress = (e.loaded / e.total);
-          const overallProgress = ((i + chunkProgress) / totalChunks) * 100;
-          onProgress(Math.round(overallProgress));
-        }
-      });
-
-      xhr.addEventListener('load', () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          console.log(`[upload] Chunk ${i + 1}/${totalChunks} sent`);
-          resolve();
-        } else {
-          try {
-            const body = JSON.parse(xhr.responseText);
-            reject(new Error(body.error || `Chunk failed (HTTP ${xhr.status})`));
-          } catch {
-            reject(new Error(`Chunk failed (HTTP ${xhr.status})`));
-          }
-        }
-      });
-
-      xhr.addEventListener('error', () => reject(new Error('Network error during chunk transfer')));
-      xhr.open('POST', '/api/transfer/part');
-
-      const token = localStorage.getItem(TOKEN_KEY);
-      if (token) {
-        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-      }
-
-      xhr.send(formData);
+    await fetchJSON('/api/transfer/part', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uploadId, chunkIndex: i, data }),
     });
+
+    onProgress(Math.round(((i + 1) / totalChunks) * 100));
+    if ((i + 1) % 10 === 0 || i === totalChunks - 1) {
+      console.log(`[transfer] ${i + 1}/${totalChunks} chunks sent`);
+    }
   }
 
-  // 3. Complete the transfer — server reassembles and validates
-  console.log('[upload] All chunks sent, completing transfer...');
+  console.log('[transfer] completing...');
   onProgress(100);
   return fetchJSON<UploadResult>('/api/transfer/done', {
     method: 'POST',
