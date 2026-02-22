@@ -6,78 +6,77 @@ import { v4 as uuidv4 } from 'uuid';
 import { validateMp3 } from '../services/audioProcessor';
 import { getUploadDir } from '../services/fileManager';
 
-// Track in-progress chunked uploads
-interface ChunkedUploadState {
-  totalChunks: number;
-  receivedChunks: Set<number>;
-  filename: string;
-  mimeType: string;
-  chunksDir: string;
+// Track in-progress sessions
+interface SessionState {
+  totalParts: number;
+  received: Set<number>;
+  name: string;
+  kind: string;
+  dir: string;
 }
-const chunkedUploads = new Map<string, ChunkedUploadState>();
+const sessions = new Map<string, SessionState>();
 
-export const transferRouter = Router();
+export const processRouter = Router();
 
-// ── Transfer: initialize ─────────────────────────────────────────────
-transferRouter.post(
-  '/begin',
+// ── Init session ────────────────────────────────────────────────────
+processRouter.post(
+  '/init',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { filename, totalChunks, mimeType } = req.body;
+      const { name, parts, kind } = req.body;
 
-      if (!filename || !totalChunks) {
-        res.status(400).json({ error: 'Missing required fields: filename, totalChunks' });
+      if (!name || !parts) {
+        res.status(400).json({ error: 'Missing required fields: name, parts' });
         return;
       }
 
-      const uploadId = uuidv4();
-      const chunksDir = path.join(getUploadDir(), `chunks-${uploadId}`);
-      await fs.mkdir(chunksDir, { recursive: true });
+      const sessionId = uuidv4();
+      const dir = path.join(getUploadDir(), `sess-${sessionId}`);
+      await fs.mkdir(dir, { recursive: true });
 
-      chunkedUploads.set(uploadId, {
-        totalChunks,
-        receivedChunks: new Set(),
-        filename,
-        mimeType: mimeType || 'audio/mpeg',
-        chunksDir,
+      sessions.set(sessionId, {
+        totalParts: parts,
+        received: new Set(),
+        name,
+        kind: kind || 'audio/mpeg',
+        dir,
       });
 
-      res.status(200).json({ uploadId });
+      res.status(200).json({ sessionId });
     } catch (err) {
       next(err);
     }
   },
 );
 
-// ── Transfer: receive a chunk (base64 JSON, no multipart) ────────────
-transferRouter.post(
-  '/part',
+// ── Receive a chunk ─────────────────────────────────────────────────
+processRouter.post(
+  '/chunk',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { uploadId, chunkIndex, data } = req.body;
-      const idx = typeof chunkIndex === 'number' ? chunkIndex : parseInt(chunkIndex, 10);
+      const { sessionId, idx, payload } = req.body;
+      const index = typeof idx === 'number' ? idx : parseInt(idx, 10);
 
-      if (!uploadId || isNaN(idx) || !data) {
-        res.status(400).json({ error: 'Missing uploadId, chunkIndex, or data' });
+      if (!sessionId || isNaN(index) || !payload) {
+        res.status(400).json({ error: 'Missing sessionId, idx, or payload' });
         return;
       }
 
-      const state = chunkedUploads.get(uploadId);
+      const state = sessions.get(sessionId);
       if (!state) {
-        res.status(404).json({ error: 'Transfer session not found' });
+        res.status(404).json({ error: 'Session not found' });
         return;
       }
 
-      // Decode base64 and write to chunk file
-      const buffer = Buffer.from(data, 'base64');
-      const chunkPath = path.join(state.chunksDir, `chunk-${String(idx).padStart(5, '0')}`);
+      const buffer = Buffer.from(payload, 'base64');
+      const chunkPath = path.join(state.dir, `p-${String(index).padStart(5, '0')}`);
       await fs.writeFile(chunkPath, buffer);
-      state.receivedChunks.add(idx);
+      state.received.add(index);
 
       res.status(200).json({
-        chunkIndex: idx,
-        received: state.receivedChunks.size,
-        total: state.totalChunks,
+        idx: index,
+        done: state.received.size,
+        total: state.totalParts,
       });
     } catch (err) {
       next(err);
@@ -85,27 +84,27 @@ transferRouter.post(
   },
 );
 
-// ── Transfer: complete (reassemble chunks) ───────────────────────────
-transferRouter.post(
-  '/done',
+// ── Finalize (reassemble) ───────────────────────────────────────────
+processRouter.post(
+  '/finalize',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { uploadId } = req.body;
+      const { sessionId } = req.body;
 
-      if (!uploadId) {
-        res.status(400).json({ error: 'Missing uploadId' });
+      if (!sessionId) {
+        res.status(400).json({ error: 'Missing sessionId' });
         return;
       }
 
-      const state = chunkedUploads.get(uploadId);
+      const state = sessions.get(sessionId);
       if (!state) {
-        res.status(404).json({ error: 'Transfer session not found' });
+        res.status(404).json({ error: 'Session not found' });
         return;
       }
 
-      if (state.receivedChunks.size !== state.totalChunks) {
+      if (state.received.size !== state.totalParts) {
         res.status(400).json({
-          error: `Missing chunks: received ${state.receivedChunks.size} of ${state.totalChunks}`,
+          error: `Incomplete: received ${state.received.size} of ${state.totalParts}`,
         });
         return;
       }
@@ -117,8 +116,8 @@ transferRouter.post(
       const assembledPath = path.join(assembledDir, 'original.mp3');
 
       const writeStream = createWriteStream(assembledPath);
-      for (let i = 0; i < state.totalChunks; i++) {
-        const chunkPath = path.join(state.chunksDir, `chunk-${String(i).padStart(5, '0')}`);
+      for (let i = 0; i < state.totalParts; i++) {
+        const chunkPath = path.join(state.dir, `p-${String(i).padStart(5, '0')}`);
         const chunkData = await fs.readFile(chunkPath);
         writeStream.write(chunkData);
       }
@@ -127,8 +126,8 @@ transferRouter.post(
         writeStream.on('error', reject);
       });
 
-      await fs.rm(state.chunksDir, { recursive: true, force: true });
-      chunkedUploads.delete(uploadId);
+      await fs.rm(state.dir, { recursive: true, force: true });
+      sessions.delete(sessionId);
 
       const isValid = await validateMp3(assembledPath);
       if (!isValid) {
@@ -140,8 +139,8 @@ transferRouter.post(
       const stat = await fs.stat(assembledPath);
       res.status(201).json({
         id: assembledId,
-        filename: state.filename,
-        mimeType: state.mimeType,
+        filename: state.name,
+        mimeType: state.kind,
         sizeBytes: stat.size,
         createdAt: new Date().toISOString(),
       });

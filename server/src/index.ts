@@ -3,7 +3,7 @@ import express from 'express';
 import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
-import { transferRouter } from './routes/upload';
+import { processRouter } from './routes/upload';
 import { transcribeRouter } from './routes/transcribe';
 import { summarizeRouter } from './routes/summarize';
 import { exportRouter } from './routes/export';
@@ -22,8 +22,8 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Transfer routes accept base64 chunks — 512KB raw ≈ 700KB base64
-app.use('/api/transfer', express.json({ limit: '1mb' }), transferRouter);
+// Process routes accept small JSON payloads (~87KB each)
+app.use('/api/process', express.json({ limit: '256kb' }), processRouter);
 
 // Global JSON parser for all other routes
 app.use(express.json({ limit: '1mb' }));

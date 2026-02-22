@@ -34,7 +34,9 @@ export default function Upload({ onUploadComplete }: UploadProps) {
       const result = await uploadFile(file, setProgress);
       onUploadComplete(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
+      const msg = err instanceof Error ? err.message : 'Upload failed';
+      // Prefix with [APP] so we can distinguish our errors from proxy/platform errors
+      setError(`[APP v5] ${msg}`);
     } finally {
       setIsUploading(false);
     }
