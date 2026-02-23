@@ -44,7 +44,9 @@ const clientDist = path.resolve(__dirname, '../../client/dist');
 let inlineSpaHtml: string | null = null;
 
 function buildInlineSpa(): string {
-  if (inlineSpaHtml) return inlineSpaHtml;
+  // In production, cache the inlined HTML for performance.
+  // In development, always re-read so client rebuilds are picked up immediately.
+  if (inlineSpaHtml && process.env.NODE_ENV === 'production') return inlineSpaHtml;
 
   // Read the built index.html to find asset filenames
   const html = fs.readFileSync(path.join(clientDist, 'index.html'), 'utf-8');
