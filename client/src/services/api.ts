@@ -131,7 +131,31 @@ export async function startTranscription(
 }
 
 export async function pollTranscriptionStatus(id: string): Promise<TranscriptionResult> {
-  return fetchJSON(`/api/transcribe/${id}/status`);
+  let res: Response;
+  try {
+    res = await fetch(`/api/transcribe/${id}/status`, {
+      headers: { ...getAuthHeaders() },
+    });
+  } catch (networkErr) {
+    throw new Error(`Network error: ${networkErr}`);
+  }
+  // Rate-limited by proxy or server — throw a retryable error instead of
+  // parsing the body (the caller uses exponential backoff on failures)
+  if (res.status === 429) {
+    throw new Error('Rate limited — backing off');
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    let errorMsg: string;
+    try {
+      const body = JSON.parse(text);
+      errorMsg = body.error || `HTTP ${res.status}`;
+    } catch {
+      errorMsg = text ? `HTTP ${res.status}: ${text.substring(0, 200)}` : `HTTP ${res.status}`;
+    }
+    throw new Error(errorMsg);
+  }
+  return res.json();
 }
 
 export async function requestSummarization(

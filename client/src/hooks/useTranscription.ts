@@ -13,11 +13,13 @@ interface UseTranscriptionReturn {
   elapsedSeconds: number;
 }
 
-const POLL_INTERVAL_MS = 2000;
+const POLL_INTERVAL_MS = 3000;
 // If progress percent doesn't change for this long, warn the user
 const STALL_WARN_MS = 60_000;
 // Number of consecutive poll failures before giving up
-const MAX_POLL_FAILURES = 5;
+const MAX_POLL_FAILURES = 30;
+// Max backoff delay on consecutive failures (ms)
+const MAX_BACKOFF_MS = 15_000;
 
 export function useTranscription(): UseTranscriptionReturn {
   const [transcription, setTranscription] = useState<TranscriptionResult | null>(null);
@@ -126,11 +128,16 @@ export function useTranscription(): UseTranscriptionReturn {
               stopPolling();
               return; // Don't schedule next poll
             }
-            // Otherwise continue polling — transient network errors are expected for long transcriptions
+            // Otherwise continue polling with backoff — transient errors and
+            // rate-limiting from proxies are expected for long transcriptions
           }
 
-          // Schedule next poll (only if we haven't returned early above)
-          pollRef.current = setTimeout(poll, POLL_INTERVAL_MS);
+          // Exponential backoff on consecutive failures, normal interval on success
+          const failures = consecutiveFailuresRef.current;
+          const delay = failures > 0
+            ? Math.min(POLL_INTERVAL_MS * 2 ** (failures - 1), MAX_BACKOFF_MS)
+            : POLL_INTERVAL_MS;
+          pollRef.current = setTimeout(poll, delay);
         };
 
         // Fire first poll immediately to get backend progress ASAP
