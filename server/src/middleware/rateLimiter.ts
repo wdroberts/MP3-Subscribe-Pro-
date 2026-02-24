@@ -8,6 +8,10 @@ export function createRateLimiter() {
     legacyHeaders: false,
     message: { error: 'Too many requests, please try again later' },
     skip: (req) => req.path.startsWith('/api/process') || req.path.startsWith('/api/transcribe'),
+    handler: (req, res) => {
+      console.warn(`[RATE-LIMIT] Blocked: ${req.method} ${req.path}`);
+      res.status(429).json({ error: 'Too many requests, please try again later' });
+    },
   });
 }
 

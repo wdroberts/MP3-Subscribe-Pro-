@@ -54,6 +54,7 @@ transcribeRouter.get(
   async (req: Request<{ id: string }>, res: Response, next: NextFunction) => {
     try {
       const job = getTranscriptionJob(req.params.id);
+      console.log(`[STATUS] GET /${req.params.id}/status → ${job ? job.status : '404'} (progress: ${job?.progress?.percent ?? '-'}%)`);
       if (!job) {
         res.status(404).json({ error: 'Transcription job not found' });
         return;
