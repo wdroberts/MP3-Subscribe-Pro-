@@ -22,7 +22,7 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>MP3 Transcribe Pro (v6-chunked)</h1>
+        <h1>MP3 Transcribe Pro (v7)</h1>
         <p>Upload an audio file to transcribe, summarize, and export.</p>
       </header>
 
