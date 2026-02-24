@@ -133,7 +133,8 @@ export async function startTranscription(
 export async function pollTranscriptionStatus(id: string): Promise<TranscriptionResult> {
   let res: Response;
   try {
-    res = await fetch(`/api/transcribe/${id}/status`, {
+    // Cache-busting query param prevents platform proxy from caching/coalescing poll responses
+    res = await fetch(`/api/transcribe/${id}/status?_=${Date.now()}`, {
       headers: { ...getAuthHeaders() },
       cache: 'no-store',
     });
