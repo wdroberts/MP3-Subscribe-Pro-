@@ -133,10 +133,12 @@ export async function startTranscription(
 export async function pollTranscriptionStatus(id: string): Promise<TranscriptionResult> {
   let res: Response;
   try {
-    // Cache-busting query param prevents platform proxy from caching/coalescing poll responses
-    res = await fetch(`/api/transcribe/${id}/status?_=${Date.now()}`, {
-      headers: { ...getAuthHeaders() },
-      cache: 'no-store',
+    // POST requests are never cached by proxies — unlike GET which the platform
+    // proxy caches/rate-limits, causing the UI to lose connection after ~10 chunks.
+    res = await fetch(`/api/transcribe/${id}/status`, {
+      method: 'POST',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ t: Date.now() }),
     });
   } catch (networkErr) {
     throw new Error(`Network error: ${networkErr}`);

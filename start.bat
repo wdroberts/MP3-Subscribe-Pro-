@@ -30,7 +30,7 @@ if not exist node_modules (
 
 echo Starting MP3 Transcribe Pro...
 echo The browser will open automatically when the server is ready...
-echo If it doesn't, open http://localhost:5173/api/app in your browser.
+echo If it doesn't, open http://localhost:5173/api/go in your browser.
 echo.
 echo Press Ctrl+C to stop the servers.
 echo.

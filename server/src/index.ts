@@ -37,70 +37,75 @@ app.use('/api/export', exportRouter);
 app.use(errorHandler);
 
 // ── Self-contained SPA served from an API path ──────────────────────
-// The platform proxy caches all static paths (/, /app, /assets/*) but
-// passes /api/* through to our server.  So we inline ALL JS + CSS into
-// a single HTML response on /api/spa.  Nothing external to cache.
+// The platform proxy caches GET responses aggressively, so we use a two-stage
+// approach: (1) a tiny bootstrapper HTML page, and (2) the real app code
+// delivered via POST (proxies don't cache POST responses).
 const clientDist = path.resolve(__dirname, '../../client/dist');
-let inlineSpaHtml: string | null = null;
+let cachedJs = '';
+let cachedCss = '';
 
-function buildInlineSpa(): string {
-  // In production, cache the inlined HTML for performance.
-  // In development, always re-read so client rebuilds are picked up immediately.
-  if (inlineSpaHtml && process.env.NODE_ENV === 'production') return inlineSpaHtml;
+function loadBundleAssets(): { js: string; css: string } {
+  // In production, cache. In dev, always re-read.
+  if (cachedJs && process.env.NODE_ENV === 'production') return { js: cachedJs, css: cachedCss };
 
-  // Read the built index.html to find asset filenames
   const html = fs.readFileSync(path.join(clientDist, 'index.html'), 'utf-8');
-
-  // Extract JS and CSS filenames from the HTML
   const jsMatch = html.match(/src="\/assets\/(index-[^"]+\.js)"/);
   const cssMatch = html.match(/href="\/assets\/(index-[^"]+\.css)"/);
 
-  let jsContent = '';
-  let cssContent = '';
+  cachedJs = jsMatch ? fs.readFileSync(path.join(clientDist, 'assets', jsMatch[1]), 'utf-8') : '';
+  cachedCss = cssMatch ? fs.readFileSync(path.join(clientDist, 'assets', cssMatch[1]), 'utf-8') : '';
+  return { js: cachedJs, css: cachedCss };
+}
 
-  if (jsMatch) {
-    jsContent = fs.readFileSync(path.join(clientDist, 'assets', jsMatch[1]), 'utf-8');
-  }
-  if (cssMatch) {
-    cssContent = fs.readFileSync(path.join(clientDist, 'assets', cssMatch[1]), 'utf-8');
-  }
-
-  // Build a completely self-contained HTML page — no external requests needed
-  inlineSpaHtml = `<!doctype html>
+// Tiny bootstrapper — even if the proxy caches this HTML, it just loads fresh
+// code via POST on every page load.  The bootstrapper itself never changes.
+const bootstrapperHtml = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>MP3 Transcribe Pro</title>
-<style>${cssContent}</style>
 </head>
 <body>
-<div id="root"></div>
-<script type="module">${jsContent}</script>
+<div id="root"><p style="font-family:system-ui;text-align:center;margin-top:40vh">Loading app&hellip;</p></div>
+<script>
+(async()=>{
+  try{
+    const r=await fetch('/api/bundle',{method:'POST'});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const{css,js}=await r.json();
+    const s=document.createElement('style');s.textContent=css;document.head.appendChild(s);
+    const b=new Blob([js],{type:'application/javascript'});
+    const u=URL.createObjectURL(b);
+    const sc=document.createElement('script');sc.type='module';sc.src=u;document.body.appendChild(sc);
+  }catch(e){
+    document.getElementById('root').innerHTML='<p style="color:red;font-family:system-ui;text-align:center;margin-top:40vh">Failed to load app: '+e.message+'</p>';
+  }
+})();
+</script>
 </body>
 </html>`;
 
-  return inlineSpaHtml;
-}
+// POST /api/bundle — returns JS+CSS as JSON. POST is never cached by proxies.
+app.post('/api/bundle', (_req, res) => {
+  const { js, css } = loadBundleAssets();
+  res.json({ js, css });
+});
 
-// Primary SPA endpoint — new path to escape stale proxy cache on /api/spa
-app.get('/api/app', (_req, res) => {
+// GET /api/go — the bootstrapper page (safe to cache — it just loads via POST)
+app.get('/api/go', (_req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
-  res.setHeader('Surrogate-Control', 'no-store');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-  res.send(buildInlineSpa());
+  res.send(bootstrapperHtml);
 });
-// Legacy endpoint — redirect to /api/app so old bookmarks still work
-app.get('/api/spa', (_req, res) => {
-  res.redirect(302, '/api/app');
-});
+
+// Legacy endpoints redirect to the new bootstrapper
+app.get('/api/app', (_req, res) => { res.redirect(302, '/api/go'); });
+app.get('/api/spa', (_req, res) => { res.redirect(302, '/api/go'); });
 
 // Static assets still available as fallback
 app.use(express.static(clientDist, { index: false }));
 // All other routes redirect to /api/spa
-app.get('*', (_req, res) => { res.redirect(302, '/api/app'); });
+app.get('*', (_req, res) => { res.redirect(302, '/api/go'); });
 
 async function start() {
   await ensureUploadDir();

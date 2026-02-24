@@ -49,27 +49,30 @@ transcribeRouter.post(
   },
 );
 
-transcribeRouter.get(
-  '/:id/status',
-  async (req: Request<{ id: string }>, res: Response, next: NextFunction) => {
-    try {
-      const job = getTranscriptionJob(req.params.id);
-      console.log(`[STATUS] GET /${req.params.id}/status → ${job ? job.status : '404'} (progress: ${job?.progress?.percent ?? '-'}%)`);
-      if (!job) {
-        res.status(404).json({ error: 'Transcription job not found' });
-        return;
-      }
-
-      if (job.status === 'completed') {
-        res.json(job);
-      } else {
-        res.json({ id: job.id, status: job.status, error: job.error, progress: job.progress });
-      }
-    } catch (err) {
-      next(err);
+// Shared status handler — used by both GET and POST
+async function handleStatusRequest(req: Request<{ id: string }>, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const job = getTranscriptionJob(req.params.id);
+    const method = req.method;
+    console.log(`[STATUS] ${method} /${req.params.id}/status → ${job ? job.status : '404'} (progress: ${job?.progress?.percent ?? '-'}%)`);
+    if (!job) {
+      res.status(404).json({ error: 'Transcription job not found' });
+      return;
     }
-  },
-);
+
+    if (job.status === 'completed') {
+      res.json(job);
+    } else {
+      res.json({ id: job.id, status: job.status, error: job.error, progress: job.progress });
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET for backward compat (old client code), POST for new code (proxy-safe)
+transcribeRouter.get('/:id/status', handleStatusRequest);
+transcribeRouter.post('/:id/status', handleStatusRequest);
 
 // 4 MB threshold — files larger than this go to Path C (MP3 chunking)
 // and don't need WAV conversion at all
