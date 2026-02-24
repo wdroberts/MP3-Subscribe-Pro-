@@ -86,7 +86,9 @@ function buildInlineSpa(): string {
 // THE endpoint — proxy can't cache /api/* paths
 app.get('/api/spa', (_req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.send(buildInlineSpa());
 });
 

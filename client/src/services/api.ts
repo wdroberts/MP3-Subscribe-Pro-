@@ -135,6 +135,7 @@ export async function pollTranscriptionStatus(id: string): Promise<Transcription
   try {
     res = await fetch(`/api/transcribe/${id}/status`, {
       headers: { ...getAuthHeaders() },
+      cache: 'no-store',
     });
   } catch (networkErr) {
     throw new Error(`Network error: ${networkErr}`);
