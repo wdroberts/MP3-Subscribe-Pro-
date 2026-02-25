@@ -13,8 +13,31 @@ interface SessionState {
   name: string;
   kind: string;
   dir: string;
+  createdAt: number;
 }
 const sessions = new Map<string, SessionState>();
+
+// ── Session cleanup — evict abandoned sessions after 30 minutes ──────
+const SESSION_MAX_AGE_MS = 30 * 60 * 1000;
+const SESSION_MAX_PARTS = 500; // ~500 MB at 1 MB per chunk
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, state] of sessions) {
+    if (now - state.createdAt > SESSION_MAX_AGE_MS) {
+      fs.rm(state.dir, { recursive: true, force: true }).catch(() => {});
+      sessions.delete(id);
+    }
+  }
+}, 5 * 60 * 1000).unref();
+
+// Sanitize a filename — strip path separators and control characters
+function sanitizeFilename(name: string): string {
+  return name
+    .replace(/[/\\:*?"<>|\x00-\x1f]/g, '_')
+    .replace(/^\.+/, '_')
+    .slice(0, 255);
+}
 
 export const processRouter = Router();
 
@@ -25,8 +48,14 @@ processRouter.post(
     try {
       const { name, parts, kind } = req.body;
 
-      if (!name || !parts) {
-        res.status(400).json({ error: 'Missing required fields: name, parts' });
+      if (!name || typeof name !== 'string') {
+        res.status(400).json({ error: 'Missing or invalid field: name' });
+        return;
+      }
+
+      const partCount = typeof parts === 'number' ? parts : parseInt(parts, 10);
+      if (!partCount || isNaN(partCount) || partCount < 1 || partCount > SESSION_MAX_PARTS) {
+        res.status(400).json({ error: `parts must be between 1 and ${SESSION_MAX_PARTS}` });
         return;
       }
 
@@ -35,11 +64,12 @@ processRouter.post(
       await fs.mkdir(dir, { recursive: true });
 
       sessions.set(sessionId, {
-        totalParts: parts,
+        totalParts: partCount,
         received: new Set(),
-        name,
+        name: sanitizeFilename(name),
         kind: kind || 'audio/mpeg',
         dir,
+        createdAt: Date.now(),
       });
 
       res.status(200).json({ sessionId });
@@ -57,14 +87,24 @@ processRouter.post(
       const { sessionId, idx, payload } = req.body;
       const index = typeof idx === 'number' ? idx : parseInt(idx, 10);
 
-      if (!sessionId || isNaN(index) || !payload) {
-        res.status(400).json({ error: 'Missing sessionId, idx, or payload' });
+      if (!sessionId || typeof sessionId !== 'string') {
+        res.status(400).json({ error: 'Missing or invalid sessionId' });
+        return;
+      }
+      if (isNaN(index) || !payload || typeof payload !== 'string') {
+        res.status(400).json({ error: 'Missing or invalid idx or payload' });
         return;
       }
 
       const state = sessions.get(sessionId);
       if (!state) {
         res.status(404).json({ error: 'Session not found' });
+        return;
+      }
+
+      // Validate chunk index is within the declared range
+      if (index < 0 || index >= state.totalParts) {
+        res.status(400).json({ error: `idx must be between 0 and ${state.totalParts - 1}` });
         return;
       }
 
@@ -91,8 +131,8 @@ processRouter.post(
     try {
       const { sessionId } = req.body;
 
-      if (!sessionId) {
-        res.status(400).json({ error: 'Missing sessionId' });
+      if (!sessionId || typeof sessionId !== 'string') {
+        res.status(400).json({ error: 'Missing or invalid sessionId' });
         return;
       }
 
@@ -115,8 +155,14 @@ processRouter.post(
       await fs.mkdir(assembledDir, { recursive: true });
       const assembledPath = path.join(assembledDir, 'original.mp3');
 
+      // Assemble chunks into final file with backpressure handling
       const writeStream = createWriteStream(assembledPath);
+      // Attach error handler immediately to prevent unhandled stream errors
+      let streamError: Error | null = null;
+      writeStream.on('error', (err) => { streamError = err; });
+
       for (let i = 0; i < state.totalParts; i++) {
+        if (streamError) break;
         const chunkPath = path.join(state.dir, `p-${String(i).padStart(5, '0')}`);
         const chunkData = await fs.readFile(chunkPath);
         if (!writeStream.write(chunkData)) {
@@ -125,11 +171,13 @@ processRouter.post(
           await new Promise<void>((resolve) => writeStream.once('drain', resolve));
         }
       }
+
       await new Promise<void>((resolve, reject) => {
+        if (streamError) return reject(streamError);
         writeStream.end(() => resolve());
-        writeStream.on('error', reject);
       });
 
+      // Clean up session temp dir
       await fs.rm(state.dir, { recursive: true, force: true });
       sessions.delete(sessionId);
 

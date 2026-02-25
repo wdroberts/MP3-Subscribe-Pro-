@@ -14,6 +14,7 @@ jest.mock('../services/jobStore');
 
 const mockedUploadExists = jest.mocked(fileManager.uploadExists);
 const mockedGetUploadDir = jest.mocked(fileManager.getUploadDir);
+const mockedIsValidUploadId = jest.mocked(fileManager.isValidUploadId);
 const mockedCreateJob = jest.mocked(jobStore.createTranscriptionJob);
 const mockedUpdateJob = jest.mocked(jobStore.updateTranscriptionJob);
 const mockedGetJob = jest.mocked(jobStore.getTranscriptionJob);
@@ -37,6 +38,8 @@ describe('transcribe routes', () => {
     jest.spyOn(console, 'error').mockImplementation(() => {});
     // Default: small file (under 4MB threshold) so tests use the WAV conversion path
     jest.spyOn(fsPromises, 'stat').mockResolvedValue({ size: 100_000 } as any);
+    // Allow all upload IDs through validation (module is fully mocked)
+    mockedIsValidUploadId.mockReturnValue(true);
   });
 
   afterEach(() => {

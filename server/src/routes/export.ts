@@ -2,6 +2,9 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { getTranscriptionJob } from '../services/jobStore';
 import { toSrt, toTimestampedText } from '../utils/formatters';
 import { createRateLimiter } from '../middleware/rateLimiter';
+import { isValidUploadId } from '../services/fileManager';
+
+const VALID_FORMATS = new Set(['txt', 'srt', 'json']);
 
 export const exportRouter = Router();
 
@@ -11,6 +14,16 @@ exportRouter.get(
   async (req: Request<{ id: string; format: string }>, res: Response, next: NextFunction) => {
     try {
       const { id, format } = req.params;
+
+      if (!isValidUploadId(id)) {
+        res.status(400).json({ error: 'Invalid id format' });
+        return;
+      }
+
+      if (!VALID_FORMATS.has(format)) {
+        res.status(400).json({ error: 'Invalid format. Use txt, srt, or json.' });
+        return;
+      }
 
       const transcription = getTranscriptionJob(id);
       if (!transcription) {

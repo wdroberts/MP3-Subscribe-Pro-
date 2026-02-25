@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import path from 'path';
 import fsPromises from 'fs/promises';
-import { uploadExists, getUploadDir } from '../services/fileManager';
+import { uploadExists, getUploadDir, isValidUploadId } from '../services/fileManager';
 import { convertToLinear16, getConvertedPath, probeAudioMeta } from '../services/audioProcessor';
 import { transcribe, OnProgressCallback } from '../services/speechToText';
 import {
@@ -22,6 +22,11 @@ transcribeRouter.post(
 
       if (!uploadId || typeof uploadId !== 'string') {
         res.status(400).json({ error: 'uploadId is required' });
+        return;
+      }
+
+      if (!isValidUploadId(uploadId)) {
+        res.status(400).json({ error: 'Invalid uploadId format' });
         return;
       }
 

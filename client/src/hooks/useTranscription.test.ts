@@ -157,17 +157,12 @@ describe('useTranscription', () => {
       await result.current.startTranscription('upload-1');
     });
 
-    // First poll failure — should NOT fail yet (retry logic)
-    await act(async () => {
-      vi.advanceTimersByTime(2000);
-    });
-    expect(result.current.status).toBe('pending');
-    expect(result.current.error).toBeNull();
-
-    // Advance through remaining retries (4 more failures = 5 total)
-    for (let i = 0; i < 4; i++) {
+    // First poll fires immediately (setTimeout(poll, 0)), then each failure
+    // schedules the next with exponential backoff: 3s, 6s, 12s, 15s (capped).
+    // Need to advance through all 30 failures (MAX_POLL_FAILURES).
+    for (let i = 0; i < 30; i++) {
       await act(async () => {
-        vi.advanceTimersByTime(2000);
+        vi.advanceTimersByTime(15_000); // max backoff is 15s
       });
     }
 

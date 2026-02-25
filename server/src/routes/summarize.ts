@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { getTranscriptionJob } from '../services/jobStore';
 import { summarize } from '../services/summarizer';
 import { createStrictRateLimiter } from '../middleware/rateLimiter';
+import { isValidUploadId } from '../services/fileManager';
 
 export const summarizeRouter = Router();
 
@@ -14,6 +15,11 @@ summarizeRouter.post(
 
       if (!transcriptionId || typeof transcriptionId !== 'string') {
         res.status(400).json({ error: 'transcriptionId is required' });
+        return;
+      }
+
+      if (!isValidUploadId(transcriptionId)) {
+        res.status(400).json({ error: 'Invalid transcriptionId format' });
         return;
       }
 

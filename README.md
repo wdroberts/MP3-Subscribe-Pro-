@@ -83,17 +83,22 @@ MAX_FILE_SIZE_MB=100
 
 ### 4. Start the app
 
+**Windows (easiest):** Double-click `start.bat` — it installs dependencies if
+needed, starts both servers, and opens the browser automatically.
+
+**Any OS:**
+
 ```bash
 npm run dev
 ```
 
 This starts both servers:
-- **Frontend:** http://localhost:5173 (open this in your browser)
+- **Frontend:** http://localhost:5173 (opens automatically)
 - **Backend:** http://localhost:3001
 
 ### 5. Use it
 
-1. Open http://localhost:5173
+1. The browser opens automatically (or go to http://localhost:5173/api/go)
 2. Click "Upload" and select an MP3 file
 3. Wait for the transcription (you'll see "X of Y chunks completed")
 4. Read the timestamped transcription
@@ -125,10 +130,12 @@ MP3-Subscribe-Pro-/
 
 | File/Folder      | What it does                                           |
 |------------------|--------------------------------------------------------|
-| `index.ts`       | Starts the server                                      |
+| `index.ts`       | Starts the server and serves the SPA bootstrapper      |
+| `env.ts`         | Loads `.env` into `process.env`                        |
 | `routes/`        | Handles HTTP requests (upload, transcribe, etc.)       |
 | `services/`      | Core logic: speech-to-text, summarizer, file handling  |
 | `middleware/`     | Error handling and rate limiting                       |
+| `utils/`         | Export formatters (SRT, timestamped text)               |
 
 ## Available Commands
 
@@ -194,13 +201,22 @@ file.
 
 If you want to call the backend directly (for testing or building other tools):
 
-| Method | Endpoint                     | Body / Params                  | Returns                           |
-|--------|------------------------------|--------------------------------|-----------------------------------|
-| POST   | `/api/upload`                | Form data with `file` field    | `{ id, filename, sizeBytes, ... }`|
-| POST   | `/api/transcribe`            | `{ "uploadId": "..." }`       | `{ id, status: "pending" }`       |
-| GET    | `/api/transcribe/:id/status` | —                              | `{ status, progress, segments? }` |
-| POST   | `/api/summarize`             | `{ "transcriptionId": "..." }`| `{ id, summary }`                 |
-| GET    | `/api/export/:id/:format`    | format: `txt`, `srt`, or `json`| File download                    |
+**Upload (chunked JSON — no multipart):**
+
+| Method | Endpoint               | Body                                          | Returns                            |
+|--------|------------------------|-----------------------------------------------|------------------------------------|
+| POST   | `/api/process/init`    | `{ name, parts, kind }`                       | `{ sessionId }`                    |
+| POST   | `/api/process/chunk`   | `{ sessionId, idx, payload }` (base64)        | `{ idx, done, total }`             |
+| POST   | `/api/process/finalize`| `{ sessionId }`                               | `{ id, filename, sizeBytes, ... }` |
+
+**Transcription, summarization, export:**
+
+| Method | Endpoint                      | Body / Params                  | Returns                           |
+|--------|-------------------------------|--------------------------------|-----------------------------------|
+| POST   | `/api/transcribe`             | `{ "uploadId": "..." }`       | `{ id, status: "pending" }`       |
+| POST   | `/api/transcribe/:id/status`  | `{}` (any JSON body)           | `{ status, progress, segments? }` |
+| POST   | `/api/summarize`              | `{ "transcriptionId": "..." }`| `{ id, summary }`                 |
+| GET    | `/api/export/:id/:format`     | format: `txt`, `srt`, or `json`| File download                    |
 
 ## License
 

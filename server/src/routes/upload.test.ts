@@ -24,7 +24,7 @@ describe('process routes', () => {
       .post('/api/process/init')
       .send({});
     expect(res.status).toBe(400);
-    expect(res.body.error).toContain('Missing required fields');
+    expect(res.body.error).toContain('Missing or invalid field');
   });
 
   it('returns sessionId on valid init request', async () => {
@@ -40,7 +40,7 @@ describe('process routes', () => {
       .post('/api/process/chunk')
       .send({});
     expect(res.status).toBe(400);
-    expect(res.body.error).toContain('Missing sessionId');
+    expect(res.body.error).toContain('Missing or invalid');
   });
 
   it('returns 404 when chunk references unknown session', async () => {
@@ -56,7 +56,7 @@ describe('process routes', () => {
       .post('/api/process/finalize')
       .send({});
     expect(res.status).toBe(400);
-    expect(res.body.error).toContain('Missing sessionId');
+    expect(res.body.error).toContain('Missing or invalid');
   });
 
   it('returns 404 when finalize references unknown session', async () => {

@@ -11,9 +11,12 @@ const app = express();
 app.use(express.json());
 app.use('/api/export', exportRouter);
 
+const JOB_UUID = 'a0000000-0000-4000-8000-000000000001';
+const UPLOAD_UUID = 'b0000000-0000-4000-8000-000000000001';
+
 const completedJob = {
-  id: 'job-1',
-  uploadId: 'upload-1',
+  id: JOB_UUID,
+  uploadId: UPLOAD_UUID,
   segments: [
     { index: 0, startTime: 0, endTime: 2.5, text: 'Hello world.' },
     { index: 1, startTime: 2.5, endTime: 5.0, text: 'Second sentence.' },
@@ -28,23 +31,29 @@ describe('export routes', () => {
     jest.clearAllMocks();
   });
 
+  it('returns 400 when id is not a valid UUID', async () => {
+    const res = await request(app).get('/api/export/nonexistent/txt');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Invalid id format');
+  });
+
   it('returns 404 when job does not exist', async () => {
     mockedGetJob.mockReturnValue(undefined);
-    const res = await request(app).get('/api/export/nonexistent/txt');
+    const res = await request(app).get(`/api/export/${JOB_UUID}/txt`);
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('Transcription not found');
   });
 
   it('returns 400 when transcription is not completed', async () => {
     mockedGetJob.mockReturnValue({ ...completedJob, status: 'processing', segments: [], fullText: '' });
-    const res = await request(app).get('/api/export/job-1/txt');
+    const res = await request(app).get(`/api/export/${JOB_UUID}/txt`);
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('Transcription is not yet completed');
   });
 
   it('exports as txt with proper headers', async () => {
     mockedGetJob.mockReturnValue(completedJob);
-    const res = await request(app).get('/api/export/job-1/txt');
+    const res = await request(app).get(`/api/export/${JOB_UUID}/txt`);
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('text/plain');
     expect(res.headers['content-disposition']).toContain('transcription.txt');
@@ -53,7 +62,7 @@ describe('export routes', () => {
 
   it('exports as srt with proper headers', async () => {
     mockedGetJob.mockReturnValue(completedJob);
-    const res = await request(app).get('/api/export/job-1/srt');
+    const res = await request(app).get(`/api/export/${JOB_UUID}/srt`);
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('application/x-subrip');
     expect(res.headers['content-disposition']).toContain('transcription.srt');
@@ -62,7 +71,7 @@ describe('export routes', () => {
 
   it('exports as json with proper headers', async () => {
     mockedGetJob.mockReturnValue(completedJob);
-    const res = await request(app).get('/api/export/job-1/json');
+    const res = await request(app).get(`/api/export/${JOB_UUID}/json`);
     expect(res.status).toBe(200);
     expect(res.headers['content-disposition']).toContain('transcription.json');
     expect(res.body.segments).toHaveLength(2);
@@ -70,7 +79,7 @@ describe('export routes', () => {
 
   it('returns 400 for invalid format', async () => {
     mockedGetJob.mockReturnValue(completedJob);
-    const res = await request(app).get('/api/export/job-1/pdf');
+    const res = await request(app).get(`/api/export/${JOB_UUID}/pdf`);
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('Invalid format');
   });

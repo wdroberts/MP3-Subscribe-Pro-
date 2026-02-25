@@ -28,12 +28,14 @@ to clipboard.
 
 ## How the app works (step by step)
 
-1. **Upload** — The user picks an MP3 file. The frontend uploads it to the
-   backend with a progress bar.
+1. **Upload** — The user picks an MP3 file. The frontend splits it into 1 MB
+   chunks, base64-encodes each one, and sends them as JSON POST requests to the
+   backend (`/api/process/*`). This avoids multipart uploads that some proxies
+   block. A progress bar tracks chunk-by-chunk upload progress.
 2. **Transcribe** — The backend splits long audio into 3-minute chunks, sends
    each chunk to Google Speech-to-Text (up to 5 at a time for speed), and
-   collects the results. The frontend polls the backend every 2 seconds and
-   shows "X of Y chunks completed."
+   collects the results. The frontend polls the backend every 3 seconds via POST
+   (POST avoids proxy caching issues) and shows "X of Y chunks completed."
 3. **Display** — The finished transcription appears as a list of timestamped
    segments. Each timestamp is clickable.
 4. **Summarize** — The user can click a button to send the transcription text to
@@ -47,10 +49,12 @@ to clipboard.
 MP3-Subscribe-Pro-/
 ├── package.json               # Root config — defines "workspaces" for client + server
 ├── .env.example               # Template for secret keys (copy to .env)
+├── start.bat                  # Windows launcher — installs deps + starts dev servers
 ├── CLAUDE.md                  # This file
 ├── README.md                  # User-facing getting-started guide
 │
 ├── client/                    # FRONTEND — everything the user sees in the browser
+│   ├── vite.config.ts         # Vite config — dev proxy, SPA redirects, test setup
 │   ├── src/
 │   │   ├── main.tsx           # Entry point — mounts the React app
 │   │   ├── App.tsx            # Root component — manages which screen to show
@@ -73,10 +77,11 @@ MP3-Subscribe-Pro-/
 │
 ├── server/                    # BACKEND — runs on Node.js, handles API requests
 │   ├── src/
-│   │   ├── index.ts           # Starts Express, registers routes
+│   │   ├── index.ts           # Starts Express, registers routes, serves SPA
+│   │   ├── env.ts             # Loads .env file into process.env
 │   │   ├── routes/            # HTTP endpoint handlers
-│   │   │   ├── upload.ts          # POST /api/upload — saves the MP3 file
-│   │   │   ├── transcribe.ts     # POST /api/transcribe + GET status polling
+│   │   │   ├── upload.ts          # POST /api/process/* — chunked file upload
+│   │   │   ├── transcribe.ts     # POST /api/transcribe + POST/GET status polling
 │   │   │   ├── summarize.ts      # POST /api/summarize — calls OpenAI
 │   │   │   └── export.ts         # GET /api/export/:id/:format
 │   │   ├── services/          # Business logic (the "brains")
@@ -90,7 +95,7 @@ MP3-Subscribe-Pro-/
 │   │   │   └── rateLimiter.ts     # Prevents API abuse
 │   │   ├── types/             # TypeScript interfaces for the backend
 │   │   └── utils/
-│   │       └── retry.ts       # Helper to retry failed API calls
+│   │       └── formatters.ts  # SRT and timestamped-text export formatters
 │   └── package.json
 ```
 
@@ -150,13 +155,18 @@ MAX_FILE_SIZE_MB=100
 
 ### Step 3: Start the development servers
 
+**Windows (easiest):** Double-click `start.bat`. It installs dependencies if
+needed and starts both servers. The browser opens automatically.
+
+**Any OS:**
+
 ```bash
 npm run dev
 ```
 
 This starts both the frontend (http://localhost:5173) and the backend
-(http://localhost:3001) at the same time. Open http://localhost:5173 in your
-browser to use the app.
+(http://localhost:3001) at the same time. The browser opens automatically to
+http://localhost:5173/api/go.
 
 ### Other useful commands
 
@@ -172,13 +182,36 @@ npm run build         # Build for production
 
 These are the URLs the frontend calls on the backend:
 
+### Chunked upload (replaces the old multipart `/api/upload`)
+
+| Method | URL                    | What it does                                          |
+|--------|------------------------|-------------------------------------------------------|
+| POST   | `/api/process/init`    | Start an upload session (returns `sessionId`)         |
+| POST   | `/api/process/chunk`   | Send one base64-encoded 1 MB chunk                    |
+| POST   | `/api/process/finalize`| Reassemble chunks, validate, return upload result     |
+
+### Transcription
+
 | Method | URL                          | What it does                                      |
 |--------|------------------------------|---------------------------------------------------|
-| POST   | `/api/upload`                | Accepts an MP3 file upload                        |
 | POST   | `/api/transcribe`            | Starts a transcription job (returns a job ID)     |
-| GET    | `/api/transcribe/:id/status` | Returns current progress (polled every 2 seconds) |
+| POST   | `/api/transcribe/:id/status` | Returns current progress (polled every 3 seconds) |
+| GET    | `/api/transcribe/:id/status` | Same (backward compat — POST preferred)           |
+
+### Summarization & export
+
+| Method | URL                          | What it does                                      |
+|--------|------------------------------|---------------------------------------------------|
 | POST   | `/api/summarize`             | Sends transcription text to OpenAI for summary    |
 | GET    | `/api/export/:id/:format`    | Downloads the transcription as txt, srt, or json  |
+
+### App serving
+
+| Method | URL            | What it does                                           |
+|--------|----------------|--------------------------------------------------------|
+| GET    | `/api/go`      | Bootstrapper HTML page (entry point for production)    |
+| POST   | `/api/bundle`  | Returns JS + CSS as JSON (called by bootstrapper)      |
+| GET    | `/api/health`  | Health check — returns `{ status: "ok" }`              |
 
 ## Code conventions
 
@@ -245,9 +278,22 @@ Second sentence of the transcription.
 
 ## Security
 
-- File uploads are validated (type, size, content)
-- `MAX_FILE_SIZE_MB` limits upload size (default: 100 MB)
-- Express uses `helmet` for security headers
-- API endpoints are rate-limited
-- Uploaded files are cleaned up on a schedule
-- API keys are never sent to the browser — all external API calls go through the backend
+- **Upload validation** — Files are validated via `ffprobe` to confirm they
+  contain a real audio stream. Size is capped by `MAX_FILE_SIZE_MB` (default
+  100 MB). Upload sessions have a max part count and auto-expire after 30
+  minutes.
+- **Input validation** — All route parameters (IDs, filenames, chunk indices)
+  are validated for type, format, and range before use. Upload IDs must be
+  valid UUIDs. Filenames are sanitized to prevent path traversal.
+- **Rate limiting** — Three tiers: global (100 req / 15 min), upload (5000
+  req / 15 min for chunked transfers), and strict (10 req / 15 min for
+  transcription and summarization endpoints).
+- **Security headers** — Express uses `helmet` with Content Security Policy
+  enabled (restricts script/style sources).
+- **Cleanup** — Stale uploads are automatically deleted every 30 minutes
+  (files older than 2 hours). In-memory jobs are evicted after 2 hours.
+  Abandoned upload sessions are cleaned up after 30 minutes.
+- **No secrets in the browser** — API keys are never sent to the client. All
+  Google and OpenAI calls go through the backend.
+- **Proxy-safe design** — Polling uses POST (not cached by proxies), uploads
+  use chunked JSON (not blocked by proxy file-upload restrictions).
