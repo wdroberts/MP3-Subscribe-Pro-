@@ -51,25 +51,15 @@ describe('transcribe', () => {
     expect(segments[0].text).toBe('Hello.');
   });
 
-  it('uses longRunningRecognize for long audio (>60s)', async () => {
-    mockLongRunningRecognize.mockResolvedValue([{
-      promise: () => Promise.resolve([{
-        results: [{
-          alternatives: [{
-            words: [
-              { word: 'Long.', startTime: { seconds: '0', nanos: 0 }, endTime: { seconds: '1', nanos: 0 } },
-            ],
-          }],
-        }],
-      }]),
-    }]);
+  it('never uses longRunningRecognize with inline audio (avoids duration limit)', async () => {
+    // Long audio (>55s) must go through Path C (chunking + recognize) instead
+    // of longRunningRecognize with inline content, which Google rejects with:
+    // "INVALID_ARGUMENT: Inline audio exceeds duration limit. Please use a GCS URI."
+    // The chunking path requires ffmpeg which isn't mocked here, so it will throw.
+    await expect(transcribe('/tmp/audio.wav', 16000, 120)).rejects.toThrow();
 
-    const segments = await transcribe('/tmp/audio.wav', 16000, 120);
-
-    expect(mockLongRunningRecognize).toHaveBeenCalled();
-    expect(mockRecognize).not.toHaveBeenCalled();
-    expect(segments).toHaveLength(1);
-    expect(segments[0].text).toBe('Long.');
+    // The key assertion: inline longRunningRecognize must NOT be called
+    expect(mockLongRunningRecognize).not.toHaveBeenCalled();
   });
 
   it('parses string seconds correctly', async () => {

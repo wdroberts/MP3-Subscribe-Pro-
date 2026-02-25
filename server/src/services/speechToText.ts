@@ -259,7 +259,11 @@ export async function transcribe(
 ): Promise<TranscriptionSegment[]> {
   debugLog(`[STT-v4] transcribe() called. dur=${durationSeconds}s`);
 
-  const CHUNK_SECONDS = 180;
+  // Google's inline audio limit for longRunningRecognize rejects audio that
+  // exceeds a duration threshold (even when the payload fits within 10 MB).
+  // Keeping chunks under 60 s lets us always use the synchronous `recognize`
+  // method, which has no such restriction for inline content.
+  const CHUNK_SECONDS = 55;
 
   const client = getSpeechClient();
   if (!client) {
@@ -298,8 +302,8 @@ export async function transcribe(
 
     debugLog(`[STT-v4] MP3=${(mp3Size / 1e6).toFixed(2)}MB, WAV=${(wavSize / 1e6).toFixed(2)}MB, limit=${(MAX_RAW_BYTES / 1e6).toFixed(1)}MB`);
 
-    // --- Path A: MP3 fits inline ---
-    if (mp3Size <= MAX_RAW_BYTES) {
+    // --- Path A: MP3 fits inline (size AND duration must be safe) ---
+    if (mp3Size <= MAX_RAW_BYTES && durationSeconds <= CHUNK_SECONDS) {
       debugLog('[STT-v4] >>> Path A: MP3 inline');
       onProgress?.({ percent: 20, currentStep: 'Transcribing audio...', chunksTotal: 1, chunksCompleted: 0 });
       const buf = await fs.readFile(mp3Path);
@@ -308,8 +312,8 @@ export async function transcribe(
       return groupWordsIntoSentences(words);
     }
 
-    // --- Path B: WAV fits inline ---
-    if (wavSize > 0 && wavSize <= MAX_RAW_BYTES) {
+    // --- Path B: WAV fits inline (size AND duration must be safe) ---
+    if (wavSize > 0 && wavSize <= MAX_RAW_BYTES && durationSeconds <= CHUNK_SECONDS) {
       debugLog('[STT-v4] >>> Path B: WAV inline');
       onProgress?.({ percent: 20, currentStep: 'Transcribing audio...', chunksTotal: 1, chunksCompleted: 0 });
       const buf = await fs.readFile(audioFilePath);
