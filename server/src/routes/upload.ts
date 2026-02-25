@@ -33,8 +33,10 @@ setInterval(() => {
 
 // Sanitize a filename — strip path separators and control characters
 function sanitizeFilename(name: string): string {
+  // eslint-disable-next-line no-control-regex
+  const UNSAFE_CHARS = /[/\\:*?"<>|\x00-\x1f]/g;
   return name
-    .replace(/[/\\:*?"<>|\x00-\x1f]/g, '_')
+    .replace(UNSAFE_CHARS, '_')
     .replace(/^\.+/, '_')
     .slice(0, 255);
 }
@@ -181,7 +183,7 @@ processRouter.post(
       await fs.rm(state.dir, { recursive: true, force: true });
       sessions.delete(sessionId);
 
-      const maxMb = parseInt(process.env.MAX_FILE_SIZE_MB || '200', 10);
+      const maxMb = parseInt(process.env.MAX_FILE_SIZE_MB || '100', 10);
       const stat = await fs.stat(assembledPath);
       if (stat.size > maxMb * 1024 * 1024) {
         await fs.rm(assembledDir, { recursive: true, force: true });

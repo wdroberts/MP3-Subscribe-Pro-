@@ -56,8 +56,12 @@ async function extractKeyPoints(text: string): Promise<string> {
     throw new Error(`OpenAI API ${response.status}: ${errorBody}`);
   }
 
-  const result = (await response.json()) as { choices: Array<{ message: { content: string } }> };
-  return result.choices[0].message.content;
+  const result = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+  const content = result.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error('OpenAI returned an empty or malformed response');
+  }
+  return content;
 }
 
 function extractiveFallback(text: string): string {

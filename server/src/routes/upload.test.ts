@@ -1,7 +1,6 @@
 import express from 'express';
 import request from 'supertest';
 import { processRouter } from './upload';
-import * as audioProcessor from '../services/audioProcessor';
 import * as fileManager from '../services/fileManager';
 
 jest.mock('../services/audioProcessor');

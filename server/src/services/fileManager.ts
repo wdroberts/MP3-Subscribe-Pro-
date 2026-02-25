@@ -1,7 +1,5 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
-import { UploadResult } from '../types';
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './tmp/uploads';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

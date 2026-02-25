@@ -21,6 +21,7 @@ class MockFileReader {
   onload: ((e: { target: { result: string } }) => void) | null = null;
   onerror: ((err: Error) => void) | null = null;
   result: string = '';
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   readAsDataURL(_blob: Blob) {
     this.result = 'data:application/octet-stream;base64,AAAA';
     if (this.onload) this.onload({ target: { result: this.result } });

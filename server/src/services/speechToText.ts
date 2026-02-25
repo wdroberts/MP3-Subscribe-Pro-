@@ -6,6 +6,7 @@ import speech from '@google-cloud/speech';
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
+import ffmpegLib from 'fluent-ffmpeg';
 import { TranscriptionSegment } from '../types';
 
 const isDevEnv = process.env.NODE_ENV !== 'production';
@@ -212,15 +213,13 @@ async function splitIntoChunks(
   const numChunks = Math.ceil(totalDuration / chunkSeconds);
   const chunks: { path: string; startSec: number; durSec: number }[] = [];
 
-  const ffmpeg = require('fluent-ffmpeg');
-
   for (let i = 0; i < numChunks; i++) {
     const startSec = i * chunkSeconds;
     const durSec = Math.min(chunkSeconds, totalDuration - startSec);
     const outPath = path.join(outputDir, `chunk_${i}.mp3`);
 
     await new Promise<void>((resolve, reject) => {
-      ffmpeg(mp3Path)
+      ffmpegLib(mp3Path)
         .setStartTime(startSec)
         .duration(durSec)
         .audioChannels(1)
@@ -343,7 +342,7 @@ export async function transcribe(
     const chunkResults: (WordInfo[] | null)[] = new Array(chunks.length).fill(null);
 
     // Helper: report progress immediately when any chunk settles
-    function reportChunkProgress(): void {
+    const reportChunkProgress = (): void => {
       const processed = completedChunks + failedChunks;
       const chunkPercent = 10 + Math.round((processed / chunks.length) * 85);
       debugLog(`[STT-v4] Progress: ${chunkPercent}% — ${completedChunks} done, ${failedChunks} failed, ${chunks.length - processed} remaining`);
@@ -355,10 +354,10 @@ export async function transcribe(
         chunksTotal: chunks.length,
         chunksCompleted: completedChunks,
       });
-    }
+    };
 
     // Process a single chunk
-    async function processChunk(chunkIdx: number): Promise<void> {
+    const processChunk = async (chunkIdx: number): Promise<void> => {
       const chunk = chunks[chunkIdx];
       try {
         const buf = await fs.readFile(chunk.path);
@@ -382,7 +381,7 @@ export async function transcribe(
         console.error(`[STT-v4] Chunk ${chunkIdx} failed:`, (err as Error)?.message ?? err);
         reportChunkProgress();
       }
-    }
+    };
 
     // Concurrent pool: always keep up to MAX_CONCURRENT chunks in flight.
     // As soon as one finishes, the next starts immediately — no idle slots.

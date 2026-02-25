@@ -29,7 +29,11 @@ app.use(helmet({
     },
   },
 }));
-app.use(cors());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 app.use(createRateLimiter());
 
 app.get('/api/health', (_req, res) => {
@@ -132,9 +136,22 @@ async function start() {
     });
   }, CLEANUP_INTERVAL_MS);
 
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+
+  // Graceful shutdown — finish in-flight requests before exiting
+  function shutdown(signal: string) {
+    console.log(`${signal} received, shutting down gracefully...`);
+    server.close(() => {
+      console.log('Server closed');
+      process.exit(0);
+    });
+    // Force exit if shutdown takes too long
+    setTimeout(() => { process.exit(1); }, 10_000).unref();
+  }
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 start().catch(console.error);
