@@ -161,14 +161,14 @@ You upload an MP3
 Backend saves the file
        |
        v
-Audio is split into 3-minute chunks
+Audio is split into 55-second chunks
        |
        v
 Each chunk is sent to Google Speech-to-Text
 (up to 5 chunks at the same time for speed)
        |
        v
-Frontend polls every 2 seconds:
+Frontend polls every 3 seconds:
 "3 of 10 chunks completed"
        |
        v

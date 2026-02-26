@@ -32,7 +32,7 @@ to clipboard.
    chunks, base64-encodes each one, and sends them as JSON POST requests to the
    backend (`/api/process/*`). This avoids multipart uploads that some proxies
    block. A progress bar tracks chunk-by-chunk upload progress.
-2. **Transcribe** — The backend splits long audio into 3-minute chunks, sends
+2. **Transcribe** — The backend splits long audio into 55-second chunks, sends
    each chunk to Google Speech-to-Text (up to 5 at a time for speed), and
    collects the results. The frontend polls the backend every 3 seconds via POST
    (POST avoids proxy caching issues) and shows "X of Y chunks completed."
@@ -246,9 +246,9 @@ These are the URLs the frontend calls on the backend:
 
 ### Google Speech-to-Text
 - Uses the `@google-cloud/speech` library
-- Short audio (<= 60 seconds): uses `recognize` (synchronous, fast)
-- Long audio (> 60 seconds): uses `longRunningRecognize` (async)
-- Audio is split into 3-minute chunks for reliability
+- Always uses the synchronous `recognize` method with inline audio
+- Audio is split into 55-second chunks (keeps each chunk under Google's
+  60-second inline limit for `recognize`)
 - Up to 5 chunks are processed concurrently for speed
 - Word-level timestamps are requested (`enableWordTimeOffsets: true`)
 
