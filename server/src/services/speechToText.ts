@@ -171,17 +171,21 @@ async function recognizeBuffer(
     enableAutomaticPunctuation: true,
   };
 
-  let results;
-  if (durationSec > 60) {
-    debugLog('[STT-v4] Using longRunningRecognize (>60s)');
-    const [op] = await client.longRunningRecognize({ audio, config });
-    const [resp] = await withTimeout(op.promise(), CHUNK_TIMEOUT_MS, 'longRunningRecognize');
-    results = resp.results ?? [];
-  } else {
-    debugLog('[STT-v4] Using recognize (<=60s)');
-    const [resp] = await withTimeout(client.recognize({ audio, config }), CHUNK_TIMEOUT_MS, 'recognize');
-    results = resp.results ?? [];
+  // Always use synchronous recognize() for inline audio.  Google's
+  // longRunningRecognize() rejects inline content that exceeds ~60 s with
+  // "INVALID_ARGUMENT: Inline audio exceeds duration limit.  Please use a
+  // GCS URI."  Since we chunk all audio to ≤55 s, recognize() is sufficient
+  // and avoids this class of errors entirely.
+  if (durationSec > 59) {
+    throw new Error(
+      `Audio chunk is ${durationSec.toFixed(0)}s which exceeds the 59 s safety limit. ` +
+      'The caller must split audio into smaller chunks before calling recognizeBuffer.',
+    );
   }
+
+  debugLog('[STT-v4] Using recognize (sync)');
+  const [resp] = await withTimeout(client.recognize({ audio, config }), CHUNK_TIMEOUT_MS, 'recognize');
+  const results = resp.results ?? [];
 
   const words: WordInfo[] = [];
   for (const r of results) {
