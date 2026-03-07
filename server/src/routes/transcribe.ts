@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import path from 'path';
 import fsPromises from 'fs/promises';
+import ffmpeg from 'fluent-ffmpeg';
 import { uploadExists, getUploadDir, isValidUploadId } from '../services/fileManager';
 import { convertToLinear16, getConvertedPath, probeAudioMeta } from '../services/audioProcessor';
 import { transcribe, OnProgressCallback } from '../services/speechToText';
@@ -12,6 +13,76 @@ import {
 import { createStrictRateLimiter } from '../middleware/rateLimiter';
 
 export const transcribeRouter = Router();
+
+// ── Diagnostic endpoint — probe an uploaded file ─────────────────────
+transcribeRouter.post(
+  '/diagnose',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { uploadId } = req.body;
+      if (!uploadId || typeof uploadId !== 'string' || !isValidUploadId(uploadId)) {
+        res.status(400).json({ error: 'Valid uploadId is required' });
+        return;
+      }
+      const exists = await uploadExists(uploadId);
+      if (!exists) {
+        res.status(404).json({ error: 'Upload not found' });
+        return;
+      }
+
+      const uploadDir = path.join(getUploadDir(), uploadId);
+      const inputPath = path.join(uploadDir, 'original.mp3');
+      const stat = await fsPromises.stat(inputPath);
+
+      // Run ffprobe for full metadata
+      const probeData = await new Promise<Record<string, unknown>>((resolve, reject) => {
+        ffmpeg.ffprobe(inputPath, (err, metadata) => {
+          if (err) return reject(err);
+          resolve(metadata as unknown as Record<string, unknown>);
+        });
+      });
+
+      // Also run our probeAudioMeta helper
+      const ourMeta = await probeAudioMeta(inputPath);
+
+      const fmt = probeData.format as Record<string, unknown> | undefined;
+      const streams = probeData.streams as Array<Record<string, unknown>> | undefined;
+
+      res.json({
+        file: {
+          path: inputPath,
+          sizeBytes: stat.size,
+          sizeMB: +(stat.size / 1e6).toFixed(2),
+        },
+        ffprobe: {
+          duration: fmt?.duration ?? null,
+          bitRate: fmt?.bit_rate ?? null,
+          formatName: fmt?.format_name ?? null,
+          formatLongName: fmt?.format_long_name ?? null,
+          nbStreams: fmt?.nb_streams ?? null,
+          tags: fmt?.tags ?? null,
+        },
+        streams: (streams ?? []).map((s) => ({
+          codecType: s.codec_type,
+          codecName: s.codec_name,
+          sampleRate: s.sample_rate,
+          channels: s.channels,
+          bitRate: s.bit_rate,
+          duration: s.duration,
+          durationTs: s.duration_ts,
+        })),
+        ourProbe: ourMeta,
+        analysis: {
+          wouldChunk: stat.size > 4_000_000 || ourMeta.durationSeconds > 45,
+          estimatedChunks: Math.ceil(Math.max(ourMeta.durationSeconds, 1) / 45),
+          estimatedWavSizePerChunkMB: +((45 * 16000 * 2 + 44) / 1e6).toFixed(2),
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 transcribeRouter.post(
   '/',
