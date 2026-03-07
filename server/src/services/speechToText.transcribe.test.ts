@@ -27,6 +27,10 @@ jest.mock('fs/promises', () => ({
 
 import { transcribe } from './speechToText';
 
+// Increase timeout — probeActualDuration may take up to 3s to timeout in test
+// environments where ffmpeg is not available
+jest.setTimeout(15000);
+
 describe('transcribe', () => {
   beforeEach(() => {
     jest.clearAllMocks();

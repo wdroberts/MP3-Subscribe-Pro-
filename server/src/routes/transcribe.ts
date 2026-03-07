@@ -97,7 +97,7 @@ async function processTranscription(jobId: string, uploadId: string): Promise<vo
     updateTranscriptionJob(jobId, { progress: report });
   };
 
-  const CHUNK_SECONDS = 55;
+  const CHUNK_SECONDS = 45;
   const mp3Size = (await fsPromises.stat(inputPath)).size;
 
   // Always probe the MP3 for duration first — needed for both paths

@@ -216,6 +216,23 @@ async function recognizeBuffer(
 }
 
 // ---------------------------------------------------------------------------
+// Probe actual duration of an audio file via ffprobe (with timeout)
+// ---------------------------------------------------------------------------
+function probeActualDuration(filePath: string): Promise<number> {
+  return withTimeout(
+    new Promise<number>((resolve, reject) => {
+      ffmpegLib.ffprobe(filePath, (err, metadata) => {
+        if (err) return reject(err);
+        const duration = metadata?.format?.duration ?? 0;
+        resolve(duration);
+      });
+    }),
+    3_000,
+    'ffprobe duration check',
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Split an audio file into small MP3 chunks with ffmpeg
 // ---------------------------------------------------------------------------
 async function splitIntoChunks(
@@ -247,7 +264,19 @@ async function splitIntoChunks(
 
     const stat = await fs.stat(outPath);
     if (stat.size > 0) {
-      chunks.push({ path: outPath, startSec, durSec });
+      // Verify actual chunk duration — ffmpeg seeking on VBR MP3s can
+      // produce chunks longer than requested.
+      let verifiedDur = durSec;
+      try {
+        const probedDur = await probeActualDuration(outPath);
+        if (probedDur > 0) verifiedDur = probedDur;
+        if (probedDur > chunkSeconds + 5) {
+          debugLog(`[STT-v4] Chunk ${i} actual duration ${probedDur.toFixed(1)}s exceeds target ${chunkSeconds}s — will be re-split`);
+        }
+      } catch {
+        // Probe failed, use calculated duration
+      }
+      chunks.push({ path: outPath, startSec, durSec: verifiedDur });
     }
     onChunkCreated?.(i + 1, numChunks);
   }
@@ -279,7 +308,9 @@ export async function transcribe(
   // exceeds a duration threshold (even when the payload fits within 10 MB).
   // Keeping chunks under 60 s lets us always use the synchronous `recognize`
   // method, which has no such restriction for inline content.
-  const CHUNK_SECONDS = 55;
+  // Use 45 s chunks to leave a safety margin for VBR MP3s where ffmpeg
+  // seeking may produce chunks slightly longer than requested.
+  const CHUNK_SECONDS = 45;
 
   const client = getSpeechClient();
   if (!client) {
@@ -326,22 +357,47 @@ export async function transcribe(
 
     // --- Path A: MP3 fits inline (size AND duration must be safe) ---
     if (durationTrustworthy && mp3Size <= MAX_RAW_BYTES && durationSeconds <= CHUNK_SECONDS) {
-      debugLog('[STT-v4] >>> Path A: MP3 inline');
-      onProgress?.({ percent: 20, currentStep: 'Transcribing audio...', chunksTotal: 1, chunksCompleted: 0 });
-      const buf = await fs.readFile(mp3Path);
-      const words = await recognizeBuffer(client, buf, 'MP3', sampleRateHertz, durationSeconds);
-      onProgress?.({ percent: 95, currentStep: 'Finalizing...', chunksTotal: 1, chunksCompleted: 1 });
-      return groupWordsIntoSentences(words);
+      // Verify actual duration with ffprobe before sending inline — the
+      // reported duration can be wrong for VBR or malformed MP3s.
+      let actualDuration = durationSeconds;
+      try {
+        actualDuration = await probeActualDuration(mp3Path);
+        debugLog(`[STT-v4] Path A probe: reported=${durationSeconds.toFixed(1)}s, actual=${actualDuration.toFixed(1)}s`);
+      } catch {
+        debugLog('[STT-v4] Path A probe failed — using reported duration');
+      }
+      if (actualDuration > 0 && actualDuration <= CHUNK_SECONDS) {
+        debugLog('[STT-v4] >>> Path A: MP3 inline');
+        onProgress?.({ percent: 20, currentStep: 'Transcribing audio...', chunksTotal: 1, chunksCompleted: 0 });
+        const buf = await fs.readFile(mp3Path);
+        const words = await recognizeBuffer(client, buf, 'MP3', sampleRateHertz, actualDuration);
+        onProgress?.({ percent: 95, currentStep: 'Finalizing...', chunksTotal: 1, chunksCompleted: 1 });
+        return groupWordsIntoSentences(words);
+      }
+      debugLog(`[STT-v4] Path A rejected — actual duration ${actualDuration.toFixed(1)}s exceeds ${CHUNK_SECONDS}s, falling through to chunking`);
+      // Update durationSeconds so chunking uses the correct value
+      if (actualDuration > 0) durationSeconds = actualDuration;
     }
 
     // --- Path B: WAV fits inline (size AND duration must be safe) ---
     if (durationTrustworthy && wavSize > 0 && wavSize <= MAX_RAW_BYTES && durationSeconds <= CHUNK_SECONDS) {
-      debugLog('[STT-v4] >>> Path B: WAV inline');
-      onProgress?.({ percent: 20, currentStep: 'Transcribing audio...', chunksTotal: 1, chunksCompleted: 0 });
-      const buf = await fs.readFile(audioFilePath);
-      const words = await recognizeBuffer(client, buf, 'LINEAR16', sampleRateHertz, durationSeconds);
-      onProgress?.({ percent: 95, currentStep: 'Finalizing...', chunksTotal: 1, chunksCompleted: 1 });
-      return groupWordsIntoSentences(words);
+      let actualDuration = durationSeconds;
+      try {
+        actualDuration = await probeActualDuration(audioFilePath);
+        debugLog(`[STT-v4] Path B probe: reported=${durationSeconds.toFixed(1)}s, actual=${actualDuration.toFixed(1)}s`);
+      } catch {
+        debugLog('[STT-v4] Path B probe failed — using reported duration');
+      }
+      if (actualDuration > 0 && actualDuration <= CHUNK_SECONDS) {
+        debugLog('[STT-v4] >>> Path B: WAV inline');
+        onProgress?.({ percent: 20, currentStep: 'Transcribing audio...', chunksTotal: 1, chunksCompleted: 0 });
+        const buf = await fs.readFile(audioFilePath);
+        const words = await recognizeBuffer(client, buf, 'LINEAR16', sampleRateHertz, actualDuration);
+        onProgress?.({ percent: 95, currentStep: 'Finalizing...', chunksTotal: 1, chunksCompleted: 1 });
+        return groupWordsIntoSentences(words);
+      }
+      debugLog(`[STT-v4] Path B rejected — actual duration ${actualDuration.toFixed(1)}s exceeds ${CHUNK_SECONDS}s, falling through to chunking`);
+      if (actualDuration > 0) durationSeconds = actualDuration;
     }
 
     // --- Path C: chunk the MP3 into ≤55-second pieces ---
@@ -395,6 +451,14 @@ export async function transcribe(
         const buf = await fs.readFile(chunk.path);
         if (buf.length > MAX_RAW_BYTES) {
           console.warn(`[STT-v4] Chunk ${chunkIdx} too large (${(buf.length / 1e6).toFixed(2)}MB), skipping`);
+          failedChunks++;
+          reportChunkProgress();
+          return;
+        }
+        // Safety check: skip chunks whose verified duration exceeds the
+        // Google inline limit to prevent INVALID_ARGUMENT errors
+        if (chunk.durSec > 59) {
+          console.warn(`[STT-v4] Chunk ${chunkIdx} duration ${chunk.durSec.toFixed(1)}s exceeds 59s limit, skipping`);
           failedChunks++;
           reportChunkProgress();
           return;
