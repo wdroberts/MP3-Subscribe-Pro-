@@ -164,6 +164,9 @@ Backend saves the file
 Audio is split into 55-second chunks
        |
        v
+Each chunk is converted to WAV for accurate duration
+       |
+       v
 Each chunk is sent to Google Speech-to-Text
 (up to 5 chunks at the same time for speed)
        |
@@ -197,6 +200,12 @@ the terminal for error messages.
 The default limit is 100 MB. You can change `MAX_FILE_SIZE_MB` in your `.env`
 file.
 
+**Transcription fails (shows "Diagnose File" button):**
+Click the "Diagnose File" button to see detailed file metadata (duration, format,
+bitrate, streams). This helps identify issues like corrupt files or unsupported
+formats. Common causes include VBR MP3s with inaccurate headers — the app handles
+these automatically by converting chunks to WAV before transcription.
+
 ## API Reference
 
 If you want to call the backend directly (for testing or building other tools):
@@ -215,6 +224,7 @@ If you want to call the backend directly (for testing or building other tools):
 |--------|-------------------------------|--------------------------------|-----------------------------------|
 | POST   | `/api/transcribe`             | `{ "uploadId": "..." }`       | `{ id, status: "pending" }`       |
 | POST   | `/api/transcribe/:id/status`  | `{}` (any JSON body)           | `{ status, progress, segments? }` |
+| POST   | `/api/transcribe/diagnose`    | `{ "uploadId": "..." }`       | `{ metadata, streams, chunks }`   |
 | POST   | `/api/summarize`              | `{ "transcriptionId": "..." }`| `{ id, summary }`                 |
 | GET    | `/api/export/:id/:format`     | format: `txt`, `srt`, or `json`| File download                    |
 

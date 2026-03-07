@@ -197,6 +197,7 @@ These are the URLs the frontend calls on the backend:
 | POST   | `/api/transcribe`            | Starts a transcription job (returns a job ID)     |
 | POST   | `/api/transcribe/:id/status` | Returns current progress (polled every 3 seconds) |
 | GET    | `/api/transcribe/:id/status` | Same (backward compat — POST preferred)           |
+| POST   | `/api/transcribe/diagnose`   | Returns ffprobe metadata for debugging failures   |
 
 ### Summarization & export
 
@@ -249,8 +250,15 @@ These are the URLs the frontend calls on the backend:
 - Always uses the synchronous `recognize` method with inline audio
 - Audio is split into 55-second chunks (keeps each chunk under Google's
   60-second inline limit for `recognize`)
+- Each MP3 chunk is converted to WAV (LINEAR16 mono 16 kHz) before
+  sending to Google — this eliminates VBR duration ambiguity
+- Chunks that still exceed 55 seconds after splitting (common with VBR
+  MP3s) are automatically re-split into 40-second sub-chunks
 - Up to 5 chunks are processed concurrently for speed
 - Word-level timestamps are requested (`enableWordTimeOffsets: true`)
+- If transcription fails, a "Diagnose File" button appears in the UI
+  that calls `/api/transcribe/diagnose` and shows file metadata (size,
+  duration, format, bitrate, streams, chunking analysis)
 
 ### OpenAI summarization
 - Uses the Chat Completions API with `gpt-4o-mini`
@@ -258,8 +266,12 @@ These are the URLs the frontend calls on the backend:
 - Each chunk is summarized separately, then results are combined
 
 ### Audio processing
-- `ffmpeg` converts MP3 to WAV (LINEAR16) when needed
+- `ffmpeg` converts MP3 to WAV (LINEAR16 mono 16 kHz) before sending
+  chunks to Google Speech-to-Text — this gives deterministic durations
+  computed from file size instead of relying on MP3 headers
 - Files are validated to ensure they are real MP3s (checks MIME type)
+- Filenames are sanitized (spaces and unsafe characters replaced with
+  underscores) to prevent issues with ffmpeg/ffprobe path handling
 - Temporary files are cleaned up after processing
 
 ## SRT export format
