@@ -17,11 +17,27 @@ export function convertToLinear16(inputPath: string, outputDir: string): Promise
       .format('wav')
       .on('end', () => {
         // Get duration from the output file
-        ffmpeg.ffprobe(outputPath, (err, metadata) => {
+        ffmpeg.ffprobe(outputPath, async (err, metadata) => {
           if (err) return reject(err);
+          let duration = metadata.format.duration || 0;
+
+          // WAV duration from ffprobe can occasionally be 0 for certain
+          // encodings.  Fall back to computing from raw PCM size:
+          // WAV LINEAR16 mono 16 kHz = 32 000 bytes/sec
+          if (duration <= 0) {
+            try {
+              const fsP = await import('fs/promises');
+              const stat = await fsP.stat(outputPath);
+              // Subtract 44-byte WAV header
+              duration = Math.max(0, stat.size - 44) / (16000 * 2);
+            } catch {
+              // leave as 0
+            }
+          }
+
           resolve({
             sampleRateHertz: 16000,
-            durationSeconds: metadata.format.duration || 0,
+            durationSeconds: duration,
           });
         });
       })
@@ -66,11 +82,34 @@ export function getConvertedPath(uploadDir: string): string {
 /** Fast metadata probe — gets duration without converting the file */
 export function probeAudioMeta(inputPath: string): Promise<AudioMeta> {
   return new Promise((resolve, reject) => {
-    ffmpeg.ffprobe(inputPath, (err, metadata) => {
+    ffmpeg.ffprobe(inputPath, async (err, metadata) => {
       if (err) return reject(err);
+      let duration = metadata.format.duration || 0;
+
+      // Some MP3 files (especially VBR) report duration as 0 from ffprobe.
+      // Fall back to estimating from file size and bitrate.
+      if (duration <= 0) {
+        const bitRate = metadata.format.bit_rate;
+        const size = metadata.format.size;
+        if (bitRate && size) {
+          duration = Number(size) * 8 / Number(bitRate);
+        }
+      }
+
+      // If still 0, estimate from file size assuming 128 kbps MP3
+      if (duration <= 0) {
+        try {
+          const fs = await import('fs/promises');
+          const stat = await fs.stat(inputPath);
+          duration = (stat.size * 8) / 128000;
+        } catch {
+          // leave as 0 — will be handled downstream
+        }
+      }
+
       resolve({
         sampleRateHertz: 16000,
-        durationSeconds: metadata.format.duration || 0,
+        durationSeconds: duration,
       });
     });
   });

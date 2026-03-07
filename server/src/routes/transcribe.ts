@@ -100,31 +100,42 @@ async function processTranscription(jobId: string, uploadId: string): Promise<vo
   const CHUNK_SECONDS = 55;
   const mp3Size = (await fsPromises.stat(inputPath)).size;
 
+  // Always probe the MP3 for duration first — needed for both paths
+  const probedMeta = await probeAudioMeta(inputPath);
+  let durationSeconds = probedMeta.durationSeconds;
+
+  // If duration is unknown, estimate from file size (128 kbps assumption)
+  if (durationSeconds <= 0) {
+    durationSeconds = (mp3Size * 8) / 128000;
+    console.warn(`[transcribe] Duration unknown from probe — estimating ${durationSeconds.toFixed(0)}s from file size`);
+  }
+
   let segments;
-  if (mp3Size > LARGE_FILE_THRESHOLD) {
-    // Large file — skip WAV conversion, just probe for duration and send MP3 chunks directly
-    const audioMeta = await probeAudioMeta(inputPath);
-    const estimatedChunks = Math.ceil(audioMeta.durationSeconds / CHUNK_SECONDS);
+  if (mp3Size > LARGE_FILE_THRESHOLD || durationSeconds > CHUNK_SECONDS) {
+    // Large or long file — skip WAV conversion, send MP3 chunks directly
+    const estimatedChunks = Math.ceil(durationSeconds / CHUNK_SECONDS);
 
     updateTranscriptionJob(jobId, {
       progress: { percent: 5, currentStep: 'Starting transcription...', chunksTotal: estimatedChunks, chunksCompleted: 0 },
     });
 
-    segments = await transcribe(inputPath, audioMeta.sampleRateHertz, audioMeta.durationSeconds, inputPath, onProgress);
+    segments = await transcribe(inputPath, probedMeta.sampleRateHertz, durationSeconds, inputPath, onProgress);
   } else {
-    // Small file — convert to WAV (might fit inline as Path A or B)
+    // Small + short file — convert to WAV (might fit inline as Path A or B)
     updateTranscriptionJob(jobId, {
       progress: { percent: 0, currentStep: 'Converting audio...' },
     });
 
     const audioMeta = await convertToLinear16(inputPath, uploadDir);
+    // Prefer the WAV-probed duration if it's valid; otherwise keep the MP3 probe
+    const wavDuration = audioMeta.durationSeconds > 0 ? audioMeta.durationSeconds : durationSeconds;
 
     updateTranscriptionJob(jobId, {
       progress: { percent: 10, currentStep: 'Starting transcription...', chunksTotal: 1, chunksCompleted: 0 },
     });
 
     const convertedPath = getConvertedPath(uploadDir);
-    segments = await transcribe(convertedPath, audioMeta.sampleRateHertz, audioMeta.durationSeconds, inputPath, onProgress);
+    segments = await transcribe(convertedPath, audioMeta.sampleRateHertz, wavDuration, inputPath, onProgress);
   }
 
   const fullText = segments.map((s) => s.text).join(' ');

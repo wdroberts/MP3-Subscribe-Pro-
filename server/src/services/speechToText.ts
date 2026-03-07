@@ -184,7 +184,19 @@ async function recognizeBuffer(
   }
 
   debugLog('[STT-v4] Using recognize (sync)');
-  const [resp] = await withTimeout(client.recognize({ audio, config }), CHUNK_TIMEOUT_MS, 'recognize');
+  let resp;
+  try {
+    [resp] = await withTimeout(client.recognize({ audio, config }), CHUNK_TIMEOUT_MS, 'recognize');
+  } catch (err) {
+    const msg = (err as Error)?.message ?? '';
+    if (msg.includes('Inline audio exceeds duration limit')) {
+      throw new Error(
+        `Google rejected inline audio (reported ${durationSec.toFixed(0)}s). ` +
+        'The actual audio may be longer than expected. Ensure audio is split into ≤55 s chunks.',
+      );
+    }
+    throw err;
+  }
   const results = resp.results ?? [];
 
   const words: WordInfo[] = [];
@@ -306,8 +318,14 @@ export async function transcribe(
 
     debugLog(`[STT-v4] MP3=${(mp3Size / 1e6).toFixed(2)}MB, WAV=${(wavSize / 1e6).toFixed(2)}MB, limit=${(MAX_RAW_BYTES / 1e6).toFixed(1)}MB`);
 
+    // If duration is unknown or suspiciously low for the file size, force chunking.
+    // A 128 kbps MP3 at 55 s ≈ 880 KB. If the file is much bigger than what
+    // the reported duration would imply, the duration is probably wrong.
+    const durationTrustworthy = durationSeconds > 0 &&
+      (mp3Size < 200_000 || mp3Size / durationSeconds < 50_000); // ~400 kbps max
+
     // --- Path A: MP3 fits inline (size AND duration must be safe) ---
-    if (mp3Size <= MAX_RAW_BYTES && durationSeconds <= CHUNK_SECONDS) {
+    if (durationTrustworthy && mp3Size <= MAX_RAW_BYTES && durationSeconds <= CHUNK_SECONDS) {
       debugLog('[STT-v4] >>> Path A: MP3 inline');
       onProgress?.({ percent: 20, currentStep: 'Transcribing audio...', chunksTotal: 1, chunksCompleted: 0 });
       const buf = await fs.readFile(mp3Path);
@@ -317,7 +335,7 @@ export async function transcribe(
     }
 
     // --- Path B: WAV fits inline (size AND duration must be safe) ---
-    if (wavSize > 0 && wavSize <= MAX_RAW_BYTES && durationSeconds <= CHUNK_SECONDS) {
+    if (durationTrustworthy && wavSize > 0 && wavSize <= MAX_RAW_BYTES && durationSeconds <= CHUNK_SECONDS) {
       debugLog('[STT-v4] >>> Path B: WAV inline');
       onProgress?.({ percent: 20, currentStep: 'Transcribing audio...', chunksTotal: 1, chunksCompleted: 0 });
       const buf = await fs.readFile(audioFilePath);
@@ -326,12 +344,18 @@ export async function transcribe(
       return groupWordsIntoSentences(words);
     }
 
-    // --- Path C: chunk the MP3 into 3-minute pieces ---
-    debugLog('[STT-v4] >>> Path C: chunking MP3 into 3-minute pieces');
-    const estimatedChunks = Math.ceil(durationSeconds / CHUNK_SECONDS);
+    // --- Path C: chunk the MP3 into ≤55-second pieces ---
+    // If duration is still unknown, estimate from file size assuming 128 kbps
+    let effectiveDuration = durationSeconds;
+    if (effectiveDuration <= 0) {
+      effectiveDuration = (mp3Size * 8) / 128000;
+      debugLog(`[STT-v4] Duration unknown — estimating ${effectiveDuration.toFixed(0)}s from file size`);
+    }
+    debugLog(`[STT-v4] >>> Path C: chunking MP3 into ≤${CHUNK_SECONDS}s pieces (duration=${effectiveDuration.toFixed(0)}s)`);
+    const estimatedChunks = Math.ceil(effectiveDuration / CHUNK_SECONDS);
     onProgress?.({ percent: 2, currentStep: 'Splitting audio into chunks...', chunksTotal: estimatedChunks, chunksCompleted: 0 });
     const chunkDir = path.join(path.dirname(mp3Path), 'stt_chunks');
-    const chunks = await splitIntoChunks(mp3Path, chunkDir, CHUNK_SECONDS, durationSeconds, (created, total) => {
+    const chunks = await splitIntoChunks(mp3Path, chunkDir, CHUNK_SECONDS, effectiveDuration, (created, total) => {
       const splitPercent = 2 + Math.round((created / total) * 8); // 2-10%
       onProgress?.({
         percent: splitPercent,

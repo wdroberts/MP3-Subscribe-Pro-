@@ -20,6 +20,7 @@ const mockedUpdateJob = jest.mocked(jobStore.updateTranscriptionJob);
 const mockedGetJob = jest.mocked(jobStore.getTranscriptionJob);
 const mockedConvertToLinear16 = jest.mocked(audioProcessor.convertToLinear16);
 const mockedGetConvertedPath = jest.mocked(audioProcessor.getConvertedPath);
+const mockedProbeAudioMeta = jest.mocked(audioProcessor.probeAudioMeta);
 const mockedTranscribe = jest.mocked(speechToText.transcribe);
 
 const app = express();
@@ -39,6 +40,8 @@ describe('transcribe routes', () => {
     jest.spyOn(fsPromises, 'stat').mockResolvedValue({ size: 100_000 } as unknown as import('fs').Stats);
     // Allow all upload IDs through validation (module is fully mocked)
     mockedIsValidUploadId.mockReturnValue(true);
+    // Default: probeAudioMeta returns a short duration so tests take the WAV conversion path
+    mockedProbeAudioMeta.mockResolvedValue({ sampleRateHertz: 16000, durationSeconds: 30 });
   });
 
   afterEach(() => {
@@ -138,6 +141,7 @@ describe('transcribe routes', () => {
         status: 'pending',
         createdAt: '2025-01-01T00:00:00.000Z',
       });
+      mockedProbeAudioMeta.mockResolvedValue({ sampleRateHertz: 16000, durationSeconds: 10 });
       mockedConvertToLinear16.mockResolvedValue({ sampleRateHertz: 16000, durationSeconds: 10 });
       mockedGetConvertedPath.mockReturnValue('/data/uploads/up-abc/audio.wav');
       mockedTranscribe.mockResolvedValue([]);
