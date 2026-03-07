@@ -35,7 +35,7 @@ function App() {
               Upload New File
             </button>
 
-            <Transcription transcription={transcription} status={status} error={error} progress={progress} elapsedSeconds={elapsedSeconds} />
+            <Transcription transcription={transcription} status={status} error={error} progress={progress} elapsedSeconds={elapsedSeconds} uploadId={uploadResult.id} />
 
             {status === 'completed' && transcription && (
               <>

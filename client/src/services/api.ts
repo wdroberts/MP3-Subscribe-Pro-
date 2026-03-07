@@ -175,3 +175,34 @@ export async function requestSummarization(
 export function getExportUrl(id: string, format: 'txt' | 'srt' | 'json'): string {
   return `/api/export/${id}/${format}`;
 }
+
+export interface DiagnoseResult {
+  file: { path: string; sizeBytes: number; sizeMB: number };
+  ffprobe: {
+    duration: number | null;
+    bitRate: string | null;
+    formatName: string | null;
+    formatLongName: string | null;
+    nbStreams: number | null;
+    tags: Record<string, string> | null;
+  };
+  streams: Array<{
+    codecType: string;
+    codecName: string;
+    sampleRate: string;
+    channels: number;
+    bitRate: string;
+    duration: string;
+    durationTs: number;
+  }>;
+  ourProbe: { sampleRateHertz: number; durationSeconds: number };
+  analysis: { wouldChunk: boolean; estimatedChunks: number; estimatedWavSizePerChunkMB: number };
+}
+
+export async function diagnoseUpload(uploadId: string): Promise<DiagnoseResult> {
+  return fetchJSON('/api/transcribe/diagnose', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uploadId }),
+  });
+}
