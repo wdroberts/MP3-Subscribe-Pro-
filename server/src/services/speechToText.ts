@@ -477,26 +477,54 @@ export async function transcribe(
       });
     };
 
+    // Convert an MP3 chunk to WAV (LINEAR16 mono 16 kHz) so we get a
+    // deterministic duration.  VBR MP3 durations are unreliable — ffprobe
+    // and Google often disagree, causing INVALID_ARGUMENT errors.
+    const chunkToWav = (mp3ChunkPath: string): Promise<{ wavPath: string; durationSec: number }> => {
+      const wavPath = mp3ChunkPath.replace(/\.mp3$/, '.wav');
+      return new Promise((resolve, reject) => {
+        ffmpegLib(mp3ChunkPath)
+          .audioChannels(1)
+          .audioFrequency(16000)
+          .audioCodec('pcm_s16le')
+          .format('wav')
+          .on('end', async () => {
+            try {
+              const wavStat = await fs.stat(wavPath);
+              // WAV LINEAR16 mono 16 kHz = 32 000 bytes/sec + 44-byte header
+              const durationSec = Math.max(0, wavStat.size - 44) / (16000 * 2);
+              resolve({ wavPath, durationSec });
+            } catch (e) {
+              reject(e);
+            }
+          })
+          .on('error', reject)
+          .save(wavPath);
+      });
+    };
+
     // Process a single chunk
     const processChunk = async (chunkIdx: number): Promise<void> => {
       const chunk = chunks[chunkIdx];
       try {
-        const buf = await fs.readFile(chunk.path);
+        // Convert MP3 chunk → WAV for reliable duration and encoding
+        const { wavPath, durationSec } = await chunkToWav(chunk.path);
+
+        const buf = await fs.readFile(wavPath);
         if (buf.length > MAX_RAW_BYTES) {
-          console.warn(`[STT-v4] Chunk ${chunkIdx} too large (${(buf.length / 1e6).toFixed(2)}MB), skipping`);
+          console.warn(`[STT-v4] Chunk ${chunkIdx} WAV too large (${(buf.length / 1e6).toFixed(2)}MB), skipping`);
           failedChunks++;
           reportChunkProgress();
           return;
         }
-        // Safety check: skip chunks whose verified duration exceeds the
-        // Google inline limit to prevent INVALID_ARGUMENT errors
-        if (chunk.durSec > 59) {
-          console.warn(`[STT-v4] Chunk ${chunkIdx} duration ${chunk.durSec.toFixed(1)}s exceeds 59s limit, skipping`);
+        if (durationSec > 59) {
+          console.warn(`[STT-v4] Chunk ${chunkIdx} WAV duration ${durationSec.toFixed(1)}s exceeds 59s limit, skipping`);
           failedChunks++;
           reportChunkProgress();
           return;
         }
-        const words = await recognizeBuffer(client!, buf, 'MP3', 16000, chunk.durSec);
+        debugLog(`[STT-v4] Chunk ${chunkIdx}: MP3 probed ${chunk.durSec.toFixed(1)}s → WAV exact ${durationSec.toFixed(1)}s`);
+        const words = await recognizeBuffer(client!, buf, 'LINEAR16', 16000, durationSec);
         // Offset timestamps
         for (const w of words) {
           w.startTime += chunk.startSec;
@@ -505,6 +533,8 @@ export async function transcribe(
         chunkResults[chunkIdx] = words;
         completedChunks++;
         reportChunkProgress();
+        // Clean up WAV file
+        await fs.unlink(wavPath).catch(() => {});
       } catch (err) {
         failedChunks++;
         console.error(`[STT-v4] Chunk ${chunkIdx} failed:`, (err as Error)?.message ?? err);
