@@ -34,7 +34,7 @@ setInterval(() => {
 // Sanitize a filename — strip path separators and control characters
 function sanitizeFilename(name: string): string {
   // eslint-disable-next-line no-control-regex
-  const UNSAFE_CHARS = /[/\\:*?"<>|\x00-\x1f]/g;
+  const UNSAFE_CHARS = /[/\\:*?"<>|\x00-\x1f\s]/g;
   return name
     .replace(UNSAFE_CHARS, '_')
     .replace(/^\.+/, '_')
