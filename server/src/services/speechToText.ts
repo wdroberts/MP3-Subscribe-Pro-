@@ -270,13 +270,46 @@ async function splitIntoChunks(
       try {
         const probedDur = await probeActualDuration(outPath);
         if (probedDur > 0) verifiedDur = probedDur;
-        if (probedDur > chunkSeconds + 5) {
-          debugLog(`[STT-v4] Chunk ${i} actual duration ${probedDur.toFixed(1)}s exceeds target ${chunkSeconds}s — will be re-split`);
-        }
       } catch {
         // Probe failed, use calculated duration
       }
-      chunks.push({ path: outPath, startSec, durSec: verifiedDur });
+
+      // Re-split oversized chunks so every piece stays under the Google
+      // inline limit (59 s).  VBR MP3 seeking often overshoots.
+      const SAFE_LIMIT = 55;
+      if (verifiedDur > SAFE_LIMIT) {
+        debugLog(`[STT-v4] Chunk ${i} actual duration ${verifiedDur.toFixed(1)}s exceeds ${SAFE_LIMIT}s — re-splitting`);
+        const subChunkSec = 40; // shorter target to guarantee safety
+        const numSubs = Math.ceil(verifiedDur / subChunkSec);
+        for (let s = 0; s < numSubs; s++) {
+          const subStart = s * subChunkSec;
+          const subDur = Math.min(subChunkSec, verifiedDur - subStart);
+          const subPath = path.join(outputDir, `chunk_${i}_sub${s}.mp3`);
+          await new Promise<void>((resolve2, reject2) => {
+            ffmpegLib(outPath)
+              .setStartTime(subStart)
+              .duration(subDur)
+              .audioChannels(1)
+              .audioBitrate('64k')
+              .on('end', () => resolve2())
+              .on('error', (err2: Error) => reject2(err2))
+              .save(subPath);
+          });
+          const subStat = await fs.stat(subPath);
+          if (subStat.size > 0) {
+            let subVerified = subDur;
+            try {
+              const p = await probeActualDuration(subPath);
+              if (p > 0) subVerified = p;
+            } catch { /* use calculated */ }
+            chunks.push({ path: subPath, startSec: startSec + subStart, durSec: subVerified });
+          }
+        }
+        // Remove the oversized original chunk file
+        await fs.unlink(outPath).catch(() => {});
+      } else {
+        chunks.push({ path: outPath, startSec, durSec: verifiedDur });
+      }
     }
     onChunkCreated?.(i + 1, numChunks);
   }
