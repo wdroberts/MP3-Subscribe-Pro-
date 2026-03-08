@@ -39,6 +39,21 @@ describe('Transcription', () => {
     expect(screen.getByText('Something broke')).toBeInTheDocument();
   });
 
+  it('shows Diagnose File button when status is failed and uploadId is provided', () => {
+    render(
+      <Transcription transcription={null} status="failed" error="Something broke" progress={null} elapsedSeconds={0} uploadId="test-upload-id" />,
+    );
+    expect(screen.getByText('Something broke')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Diagnose File' })).toBeInTheDocument();
+  });
+
+  it('does not show Diagnose File button when uploadId is missing', () => {
+    render(
+      <Transcription transcription={null} status="failed" error="Something broke" progress={null} elapsedSeconds={0} />,
+    );
+    expect(screen.queryByRole('button', { name: 'Diagnose File' })).not.toBeInTheDocument();
+  });
+
   it('renders segments when status is completed', () => {
     render(
       <Transcription transcription={mockTranscription} status="completed" error={null} progress={null} elapsedSeconds={0} />,

@@ -145,6 +145,7 @@ export function useTranscription(): UseTranscriptionReturn {
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to start transcription');
         setStatus('failed');
+        setProgress(null);
       }
     },
     [stopPolling],
