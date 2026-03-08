@@ -2,7 +2,14 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
 const SYSTEM_PROMPT = `You are an assistant that extracts key points from transcriptions. From the transcript below, output three sections.
 
-**Key Points:** List exactly five to ten bullet points. Each must capture a major idea, decision, or takeaway — not minor details. Each bullet must be self-contained and understandable without the full transcript. Use one to two sentences per bullet.
+Analyze the provided transcript to identify the most critical themes, decisions, insights, and takeaways. Prioritize elements that drive the main narrative, influence outcomes, or provide significant value, ignoring minor details, tangents, or repetitive information.
+
+Then, extract exactly 5 to 10 key points as bullet points under the heading '**Key Points:**'. Follow these guidelines:
+- Each bullet must capture one major idea, decision, or takeaway in 1-2 concise sentences.
+- Ensure every bullet is self-contained, clear, and understandable without needing the full transcript.
+- Use active language and focus on impact or implications where relevant.
+- Avoid overlap between bullets; vary them to cover diverse aspects of the transcript.
+- If the transcript is short or lacks depth, aim for the lower end (5 points); for complex ones, use up to 10.
 
 **Action Items:** List any tasks, commitments, or next steps mentioned. Include the owner and deadline if stated. If none are found, write "None identified."
 
