@@ -84,7 +84,8 @@ MAX_FILE_SIZE_MB=100
 ### 4. Start the app
 
 **Windows (easiest):** Double-click `start.bat` — it installs dependencies if
-needed, starts both servers, and opens the browser automatically.
+needed, builds both the server and client, starts both dev servers, and opens
+the browser automatically.
 
 **Any OS:**
 

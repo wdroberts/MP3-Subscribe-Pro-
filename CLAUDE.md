@@ -49,7 +49,7 @@ to clipboard.
 MP3-Subscribe-Pro-/
 ├── package.json               # Root config — defines "workspaces" for client + server
 ├── .env.example               # Template for secret keys (copy to .env)
-├── start.bat                  # Windows launcher — installs deps + starts dev servers
+├── start.bat                  # Windows launcher — installs deps, builds, starts dev servers
 ├── CLAUDE.md                  # This file
 ├── README.md                  # User-facing getting-started guide
 │
@@ -156,7 +156,8 @@ MAX_FILE_SIZE_MB=100
 ### Step 3: Start the development servers
 
 **Windows (easiest):** Double-click `start.bat`. It installs dependencies if
-needed and starts both servers. The browser opens automatically.
+needed, builds the server and client, and starts both dev servers. The browser
+opens automatically.
 
 **Any OS:**
 
