@@ -47,11 +47,13 @@ describe('Transcription', () => {
     expect(screen.getByRole('button', { name: 'Diagnose File' })).toBeInTheDocument();
   });
 
-  it('does not show Diagnose File button when uploadId is missing', () => {
+  it('shows disabled Diagnose File button when uploadId is missing', () => {
     render(
       <Transcription transcription={null} status="failed" error="Something broke" progress={null} elapsedSeconds={0} />,
     );
-    expect(screen.queryByRole('button', { name: 'Diagnose File' })).not.toBeInTheDocument();
+    const btn = screen.getByRole('button', { name: 'Diagnose File' });
+    expect(btn).toBeDisabled();
+    expect(screen.getByText(/Upload ID unavailable/)).toBeInTheDocument();
   });
 
   it('renders segments when status is completed', () => {
