@@ -28,6 +28,16 @@ if not exist node_modules (
     )
 )
 
+echo Building project...
+call npm run build
+if %errorlevel% neq 0 (
+    echo.
+    echo ERROR: Build failed.
+    pause
+    exit /b 1
+)
+echo.
+
 echo Starting MP3 Transcribe Pro...
 echo The browser will open automatically when the server is ready...
 echo If it doesn't, open http://localhost:5173/api/go in your browser.
