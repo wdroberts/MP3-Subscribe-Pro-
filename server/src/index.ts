@@ -58,20 +58,15 @@ app.use(errorHandler);
 // approach: (1) a tiny bootstrapper HTML page, and (2) the real app code
 // delivered via POST (proxies don't cache POST responses).
 const clientDist = path.resolve(__dirname, '../../client/dist');
-let cachedJs = '';
-let cachedCss = '';
-
 function loadBundleAssets(): { js: string; css: string } {
-  // In production, cache. In dev, always re-read.
-  if (cachedJs && process.env.NODE_ENV === 'production') return { js: cachedJs, css: cachedCss };
-
+  // Always read from disk — avoids serving stale UI after deploys
   const html = fs.readFileSync(path.join(clientDist, 'index.html'), 'utf-8');
   const jsMatch = html.match(/src="\/assets\/(index-[^"]+\.js)"/);
   const cssMatch = html.match(/href="\/assets\/(index-[^"]+\.css)"/);
 
-  cachedJs = jsMatch ? fs.readFileSync(path.join(clientDist, 'assets', jsMatch[1]), 'utf-8') : '';
-  cachedCss = cssMatch ? fs.readFileSync(path.join(clientDist, 'assets', cssMatch[1]), 'utf-8') : '';
-  return { js: cachedJs, css: cachedCss };
+  const js = jsMatch ? fs.readFileSync(path.join(clientDist, 'assets', jsMatch[1]), 'utf-8') : '';
+  const css = cssMatch ? fs.readFileSync(path.join(clientDist, 'assets', cssMatch[1]), 'utf-8') : '';
+  return { js, css };
 }
 
 // Tiny bootstrapper — even if the proxy caches this HTML, it just loads fresh
