@@ -76,18 +76,18 @@ export default function Transcription({ transcription, status, error, progress, 
       {status === 'failed' && error && (
         <>
           <div className="error-message">{error}</div>
-          {uploadId && (
-            <div style={{ marginTop: '1rem' }}>
-              <button
-                className="reset-btn"
-                onClick={handleDiagnose}
-                disabled={diagnosing}
-                style={{ fontSize: '0.9rem' }}
-              >
-                {diagnosing ? 'Analyzing...' : 'Diagnose File'}
-              </button>
-              {diagnoseError && <p className="error-message" style={{ marginTop: '0.5rem' }}>{diagnoseError}</p>}
-              {diagnosis && (
+          <div style={{ marginTop: '1rem' }}>
+            <button
+              className="reset-btn"
+              onClick={handleDiagnose}
+              disabled={diagnosing || !uploadId}
+              style={{ fontSize: '0.9rem' }}
+            >
+              {diagnosing ? 'Analyzing...' : 'Diagnose File'}
+            </button>
+            {!uploadId && <p style={{ marginTop: '0.5rem', color: '#999', fontSize: '0.85rem' }}>Upload ID unavailable — cannot diagnose</p>}
+            {diagnoseError && <p className="error-message" style={{ marginTop: '0.5rem' }}>{diagnoseError}</p>}
+            {diagnosis && (
                 <div style={{ marginTop: '1rem', textAlign: 'left', background: '#f5f5f5', padding: '1rem', borderRadius: '8px', fontSize: '0.85rem', overflowX: 'auto' }}>
                   <h3 style={{ margin: '0 0 0.5rem' }}>File Analysis</h3>
                   <table style={{ borderCollapse: 'collapse', width: '100%' }}>
@@ -105,8 +105,7 @@ export default function Transcription({ transcription, status, error, progress, 
                   </table>
                 </div>
               )}
-            </div>
-          )}
+          </div>
         </>
       )}
 
